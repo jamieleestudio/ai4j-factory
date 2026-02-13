@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: ai4j-factory
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: qwen-turbo

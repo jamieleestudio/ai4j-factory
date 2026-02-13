@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/lixiaofeng/IdeaProjects/github/ai4j-factory/ai4j-factory-ui/src/components/ThemeProvider.tsx"],"sourcesContent":["\"use client\";\n\nimport { ThemeProvider as NextThemesProvider } from \"next-themes\";\nimport { type ThemeProviderProps } from \"next-themes\";\n\nexport function ThemeProvider({ children, ...props }: ThemeProviderProps) {\n  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;\n}\n"],"names":[],"mappings":";;;;;AAEA;AAFA;;;AAKO,SAAS,cAAc,EAAE,QAAQ,EAAE,GAAG,OAA2B;IACtE,qBAAO,8VAAC,4SAAkB;QAAE,GAAG,KAAK;kBAAG;;;;;;AACzC;KAFgB"}}]
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/ai4j-chatbot/ai4j-chatbot.iml" filepath="$PROJECT_DIR$/ai4j-chatbot/ai4j-chatbot.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/ai4j-factory.iml" filepath="$PROJECT_DIR$/.idea/ai4j-factory.iml" />
+    </modules>
+  </component>
+</project>

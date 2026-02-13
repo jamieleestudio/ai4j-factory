@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Gemini Light Mode */
+    --background: 255 255 255; /* #FFFFFF */
+    --foreground: 31 31 31;    /* #1F1F1F */
+    
+    --sidebar: 240 244 249;    /* #F0F4F9 */
+    --sidebar-foreground: 31 31 31;
+
+    --chat-bg: 255 255 255;    /* #FFFFFF */
+    
+    --input-bg: 240 244 249;   /* #F0F4F9 */
+    --input-border: 224 227 231;
+    
+    --accent: 227 227 227;
+    
+    --user-avatar: 227 227 227;
+    --ai-avatar-start: 59 130 246; /* blue-500 */
+    --ai-avatar-end: 168 85 247;   /* purple-500 */
+  }
+
+  .dark {
+    /* Gemini Dark Mode */
+    --background: 19 19 20;    /* #131314 */
+    --foreground: 227 227 227; /* #E3E3E3 */
+    
+    --sidebar: 30 31 32;       /* #1E1F20 */
+    --sidebar-foreground: 227 227 227;
+
+    --chat-bg: 19 19 20;       /* #131314 */
+    
+    --input-bg: 30 31 32;      /* #1E1F20 */
+    --input-border: 68 71 70;  /* #444746 */
+    
+    --accent: 68 71 70;        /* #444746 */
+    
+    --user-avatar: 55 65 81;   /* gray-700 */
+  }
+}
+
+body {
+  color: rgb(var(--foreground));
+  background: rgb(var(--background));
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--accent));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--foreground) / 0.5);
+}
