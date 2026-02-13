@@ -1,4 +1,4 @@
-package org.example;
+package org.ai4j;
 
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
