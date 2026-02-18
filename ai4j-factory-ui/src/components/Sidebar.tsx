@@ -2,6 +2,8 @@ import { Plus, MessageSquare, Settings, Menu, X, Sun, Moon } from "lucide-react"
 import clsx from "clsx";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { Modal } from "./Modal";
+import CredentialManager from "./CredentialManager";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -11,6 +13,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -75,12 +78,23 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             <span>{mounted && theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
           
-          <button className="flex items-center gap-3 w-full px-4 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors">
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors"
+          >
             <Settings size={18} className="text-gray-500" />
             <span>Settings</span>
           </button>
         </div>
       </div>
+
+      <Modal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        title="Settings"
+      >
+        <CredentialManager />
+      </Modal>
     </>
   );
 }
