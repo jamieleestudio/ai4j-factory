@@ -55,7 +55,7 @@ public class ChatStreamController {
         SseEmitter emitter = new SseEmitter(0L);
         OpenAiApi api = OpenAiApi.builder()
         .baseUrl("https://api.deepseek.com")
-        .apiKey("sk-86d534cc5380484290717613678d6b42")
+        .apiKey("sk-demo")
         .build();
 
         OpenAiChatModel model = OpenAiChatModel.builder()
