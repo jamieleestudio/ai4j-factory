@@ -20,6 +20,7 @@
     </properties>
     <modules>
         <module>ai4j-chatbot</module>
+        <module>ai4j-mcp</module>
     </modules>
 
     <build/>
