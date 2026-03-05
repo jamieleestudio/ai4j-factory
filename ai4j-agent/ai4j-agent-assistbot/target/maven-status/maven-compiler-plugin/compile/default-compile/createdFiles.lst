@@ -1,0 +1,7 @@
+org\ai4j\agent\assistbot\tool\FlightBookingService$BookingResponse.class
+org\ai4j\agent\assistbot\controller\AgentDemoController.class
+org\ai4j\agent\assistbot\AssistBotApplication.class
+org\ai4j\agent\assistbot\controller\AgentController.class
+org\ai4j\agent\assistbot\config\AgentToolsConfig.class
+org\ai4j\agent\assistbot\tool\FlightBookingService.class
+org\ai4j\agent\assistbot\tool\FlightBookingService$BookingRequest.class

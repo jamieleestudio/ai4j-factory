@@ -58,6 +58,14 @@ public class ChatStreamController {
         .apiKey("sk-demo")
         .build();
 
+//        ChatModel chatModel = ...
+//        ToolCallback[] dateTimeTools = ToolCallbacks.from(new DateTimeTools());
+//        ChatOptions chatOptions = ToolCallingChatOptions.builder()
+//                .toolCallbacks(dateTimeTools)
+//                .build();
+//        Prompt prompt = new Prompt("What day is tomorrow?", chatOptions);
+//        chatModel.call(prompt);
+
         OpenAiChatModel model = OpenAiChatModel.builder()
                 .openAiApi(api)
                 .defaultOptions(OpenAiChatOptions.builder()

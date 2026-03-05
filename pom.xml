@@ -21,6 +21,7 @@
     <modules>
         <module>ai4j-chatbot</module>
         <module>ai4j-mcp</module>
+        <module>ai4j-agent</module>
     </modules>
 
     <build/>
