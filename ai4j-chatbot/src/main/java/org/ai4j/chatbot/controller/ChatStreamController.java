@@ -6,7 +6,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.openai.setup.OpenAiSetup;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -53,10 +53,13 @@ public class ChatStreamController {
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@RequestParam("message") String message) {
         SseEmitter emitter = new SseEmitter(0L);
-        OpenAiApi api = OpenAiApi.builder()
-        .baseUrl("https://api.deepseek.com")
-        .apiKey("sk-demo")
-        .build();
+
+        var openAiClient = OpenAiSetup.setupSyncClient(
+                "https://api.deepseek.com",
+                "sk-demo",
+                null, null, null, null,
+                false, false, null, null, 0, null, null,
+                null, null, null);
 
 //        ChatModel chatModel = ...
 //        ToolCallback[] dateTimeTools = ToolCallbacks.from(new DateTimeTools());
@@ -67,20 +70,23 @@ public class ChatStreamController {
 //        chatModel.call(prompt);
 
         OpenAiChatModel model = OpenAiChatModel.builder()
-                .openAiApi(api)
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAiClient)
+                .options(OpenAiChatOptions.builder()
                         .model("deepseek-chat")
+                        .temperature(0.7)
                         .build())
                 .build();
 
         Flux<ChatResponse> flux = model.stream(new Prompt(new UserMessage(message)));
         flux.subscribe(
                 r -> {
-                    String chunk = r.getResult().getOutput().getText();
-                    try {
-                        emitter.send(SseEmitter.event().data(chunk));
-                    } catch (IOException e) {
-                        emitter.completeWithError(e);
+                    if (r.getResult() != null && r.getResult().getOutput() != null && r.getResult().getOutput().getText() != null) {
+                        String chunk = r.getResult().getOutput().getText();
+                        try {
+                            emitter.send(SseEmitter.event().data(chunk));
+                        } catch (IOException e) {
+                            emitter.completeWithError(e);
+                        }
                     }
                 },
                 emitter::completeWithError,

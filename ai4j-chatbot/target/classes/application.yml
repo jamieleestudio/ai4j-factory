@@ -16,10 +16,3 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
-  ai:
-    dashscope:
-      api-key: ${DASHSCOPE_API_KEY}
-      chat:
-        options:
-          model: qwen-turbo
-        enabled: false
