@@ -8,7 +8,7 @@
         <version>4.1.0</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.example</groupId>
+    <groupId>org.ai4j</groupId>
     <artifactId>ai4j-factory</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -16,11 +16,12 @@
     <description>Spring AI4J Alibaba Factory Project</description>
     <properties>
         <java.version>21</java.version>
+        <spring-ai-alibaba.version>1.1.2.1</spring-ai-alibaba.version>
     </properties>
     <modules>
-        <module>ai4j-chatbot</module>
-        <module>ai4j-mcp</module>
-        <module>ai4j-agent</module>
+        <module>services/ai4j-chatbot</module>
+        <module>services/mcp</module>
+        <module>services/agent</module>
     </modules>
 
     <dependencyManagement>
