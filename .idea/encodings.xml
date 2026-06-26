@@ -8,6 +8,13 @@
     <file url="file://$PROJECT_DIR$/ai4j-mcp/ai4j-mcp-spec/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai4j-mcp/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai4j-mcp/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/agent/ai4j-agent-assistbot/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/agent/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/agent/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/ai4j-chatbot/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/mcp/ai4j-mcp-spec/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/mcp/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/services/mcp/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
   </component>

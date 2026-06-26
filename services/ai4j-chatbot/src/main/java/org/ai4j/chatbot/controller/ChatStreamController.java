@@ -35,12 +35,14 @@ public class ChatStreamController {
         Flux<ChatResponse> flux = chatService.streamChat(credentialId, message, modelName);
         flux.subscribe(
                 r -> {
-                    if (r.getResult() != null && r.getResult().getOutput() != null && r.getResult().getOutput().getText() != null) {
-                        String chunk = r.getResult().getOutput().getText();
-                        try {
-                            emitter.send(SseEmitter.event().data(chunk));
-                        } catch (IOException e) {
-                            emitter.completeWithError(e);
+                    if (r.getResult() != null) {
+                        if (r.getResult().getOutput().getText() != null) {
+                            String chunk = r.getResult().getOutput().getText();
+                            try {
+                                emitter.send(SseEmitter.event().data(chunk));
+                            } catch (IOException e) {
+                                emitter.completeWithError(e);
+                            }
                         }
                     }
                 },
@@ -80,12 +82,14 @@ public class ChatStreamController {
         Flux<ChatResponse> flux = model.stream(new Prompt(new UserMessage(message)));
         flux.subscribe(
                 r -> {
-                    if (r.getResult() != null && r.getResult().getOutput() != null && r.getResult().getOutput().getText() != null) {
-                        String chunk = r.getResult().getOutput().getText();
-                        try {
-                            emitter.send(SseEmitter.event().data(chunk));
-                        } catch (IOException e) {
-                            emitter.completeWithError(e);
+                    if (r.getResult() != null) {
+                        if (r.getResult().getOutput().getText() != null) {
+                            String chunk = r.getResult().getOutput().getText();
+                            try {
+                                emitter.send(SseEmitter.event().data(chunk));
+                            } catch (IOException e) {
+                                emitter.completeWithError(e);
+                            }
                         }
                     }
                 },

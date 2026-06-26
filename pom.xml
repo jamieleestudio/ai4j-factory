@@ -22,6 +22,7 @@
         <module>services/ai4j-chatbot</module>
         <module>services/mcp</module>
         <module>services/agent</module>
+        <module>services/ai4j-chatbi</module>
     </modules>
 
     <dependencyManagement>

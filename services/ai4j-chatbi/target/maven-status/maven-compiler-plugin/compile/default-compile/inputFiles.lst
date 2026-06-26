@@ -1,0 +1,14 @@
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\ChatBiApplication.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\config\SemanticLayerConfig.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\controller\ChatBiController.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\insight\InsightGenerationService.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\insight\InsightResponse.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\intent\Filter.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\intent\IntentExtractionService.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\intent\QueryIntent.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\query\QueryExecutionService.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\query\SqlBuilder.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\semantic\Dimension.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\semantic\Metric.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\semantic\SemanticLayer.java
+C:\Users\lixiaofeng\Repos\ai4j-factory\services\ai4j-chatbi\src\main\java\org\ai4j\chatbi\semantic\Subject.java
