@@ -75,7 +75,7 @@ export default function ChatInput({ onSend, isLoading, credentials, selectedCred
                       className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-500 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors"
                     >
                       <span className="max-w-[100px] truncate">
-                        {selectedCredential ? selectedCredential.provider.name : "No Model"}
+                        {selectedCredential ? selectedCredential.provider.name : "Auto"}
                       </span>
                       <ChevronDown size={14} />
                     </button>

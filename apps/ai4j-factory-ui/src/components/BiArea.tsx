@@ -52,10 +52,14 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
-      const response = await fetch(`${baseUrl}/api/bi/query?credentialId=${selectedCredential?.id ?? ""}`, {
+      const response = await fetch(`${baseUrl}/api/bi/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: content }),
+        body: JSON.stringify({
+          question: content,
+          credentialId: selectedCredential?.id,
+          modelName: selectedCredential?.modelName ?? "deepseek-chat",
+        }),
       });
 
       if (!response.ok) {
@@ -86,7 +90,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
           )}
           <div className="flex items-center gap-2 px-3 py-2">
             <BarChart3 size={20} className="text-gray-500" />
-            <span className="text-lg font-medium text-foreground">BI Analysis</span>
+            <span className="text-lg font-medium text-foreground">Data Warehouse BI</span>
           </div>
         </div>
       </div>

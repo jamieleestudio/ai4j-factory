@@ -40,7 +40,7 @@ public class BiController {
     public InsightResponse query(@RequestBody QueryRequest request) {
         log.info("BI query: {}", request.question());
 
-        QueryIntent intent = intentService.extract(request.question());
+        QueryIntent intent = intentService.extract(request.question(), request.credentialId(), request.modelName());
         log.info("Extracted intent: subject={}, metrics={}, dimensions={}, filters={}",
                 intent.getSubject(), intent.getMetrics(), intent.getDimensions(), intent.getFilters());
 
@@ -49,8 +49,8 @@ public class BiController {
 
         List<Map<String, Object>> data = queryService.execute(sqlResult);
 
-        return insightService.generate(request.question(), data);
+        return insightService.generate(request.question(), data, request.credentialId(), request.modelName());
     }
 
-    public record QueryRequest(String question) {}
+    public record QueryRequest(String question, Long credentialId, String modelName) {}
 }

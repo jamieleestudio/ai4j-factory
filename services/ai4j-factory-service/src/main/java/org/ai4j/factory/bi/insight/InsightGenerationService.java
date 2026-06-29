@@ -1,8 +1,8 @@
 package org.ai4j.factory.bi.insight;
 
+import org.ai4j.factory.chat.ChatClientFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,17 +13,19 @@ public class InsightGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(InsightGenerationService.class);
 
-    private final ChatClient chatClient;
+    private final ChatClientFactory chatClientFactory;
 
-    public InsightGenerationService(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
+    public InsightGenerationService(ChatClientFactory chatClientFactory) {
+        this.chatClientFactory = chatClientFactory;
     }
 
-    public InsightResponse generate(String question, List<Map<String, Object>> data) {
+    public InsightResponse generate(String question, List<Map<String, Object>> data,
+                                     Long credentialId, String modelName) {
         if (data == null || data.isEmpty()) {
             return new InsightResponse(question, "没有查询到符合条件的数据。", List.of(), "single_value");
         }
 
+        var chatClient = chatClientFactory.create(credentialId, modelName);
         String prompt = buildInsightPrompt(question, data);
         String response = chatClient.prompt().user(prompt).call().content();
         return parseInsightResponse(question, data, response);

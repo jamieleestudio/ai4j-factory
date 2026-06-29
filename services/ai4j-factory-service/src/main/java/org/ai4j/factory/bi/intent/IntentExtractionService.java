@@ -4,9 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.ai4j.factory.bi.semantic.SemanticLayer;
 import org.ai4j.factory.bi.semantic.Subject;
+import org.ai4j.factory.chat.ChatClientFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.Set;
@@ -18,17 +18,18 @@ public class IntentExtractionService {
     private static final Logger log = LoggerFactory.getLogger(IntentExtractionService.class);
     private static final int MAX_RETRIES = 2;
 
-    private final ChatClient chatClient;
+    private final ChatClientFactory chatClientFactory;
     private final SemanticLayer semanticLayer;
     private final ObjectMapper objectMapper;
 
-    public IntentExtractionService(ChatClient.Builder chatClientBuilder, SemanticLayer semanticLayer) {
-        this.chatClient = chatClientBuilder.build();
+    public IntentExtractionService(ChatClientFactory chatClientFactory, SemanticLayer semanticLayer) {
+        this.chatClientFactory = chatClientFactory;
         this.semanticLayer = semanticLayer;
         this.objectMapper = new ObjectMapper();
     }
 
-    public QueryIntent extract(String question) {
+    public QueryIntent extract(String question, Long credentialId, String modelName) {
+        var chatClient = chatClientFactory.create(credentialId, modelName);
         String prompt = buildExtractionPrompt(question);
         QueryIntent intent = null;
         String lastResponse = null;

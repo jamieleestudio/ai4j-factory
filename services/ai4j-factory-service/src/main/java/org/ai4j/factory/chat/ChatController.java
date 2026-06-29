@@ -30,7 +30,7 @@ public class ChatController {
                                            @RequestParam(value = "model", required = false) String modelName) {
         SseEmitter emitter = new SseEmitter(0L);
 
-        Flux<ChatResponse> flux = chatService.streamChat(credentialId, message, modelName);
+        Flux<ChatResponse> flux = chatService.streamChat(credentialId, message, "deepseek-v4-flash");
         flux.subscribe(
                 r -> {
                     if (r.getResult() != null) {

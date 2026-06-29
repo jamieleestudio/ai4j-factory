@@ -71,7 +71,7 @@ export default function Sidebar({ isOpen, setIsOpen, activeMode, onModeChange }:
             )}
           >
             <BarChart3 size={18} className="text-gray-500" />
-            <span className="font-medium">BI</span>
+            <span className="font-medium">Data Warehouse BI</span>
           </button>
 
           <div className="flex flex-col gap-1">
