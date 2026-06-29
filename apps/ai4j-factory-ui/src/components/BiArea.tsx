@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PanelLeft, BarChart3, Loader2 } from "lucide-react";
 import ChatInput from "./ChatInput";
+import { credentialService } from "../services/credentialService";
+import { ModelCredential } from "../types/credential";
 
 interface BiAreaProps {
   isSidebarOpen: boolean;
@@ -21,6 +23,24 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<InsightResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<ModelCredential[]>([]);
+  const [selectedCredential, setSelectedCredential] = useState<ModelCredential | null>(null);
+
+  useEffect(() => {
+    const loadCredentials = async () => {
+      try {
+        const creds = await credentialService.getCredentials();
+        const activeCreds = creds.filter(c => c.enabled);
+        setCredentials(activeCreds);
+        if (activeCreds.length > 0) {
+          setSelectedCredential(activeCreds[0]);
+        }
+      } catch (error) {
+        console.error("Failed to load credentials", error);
+      }
+    };
+    loadCredentials();
+  }, []);
 
   const handleQuery = async (content: string) => {
     if (isLoading) return;
@@ -155,7 +175,13 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
 
       {/* Input Area */}
       <div className="w-full px-4 pb-6 pt-2 bg-gradient-to-t from-background via-background to-transparent">
-        <ChatInput onSend={handleQuery} isLoading={isLoading} />
+        <ChatInput
+          onSend={handleQuery}
+          isLoading={isLoading}
+          credentials={credentials}
+          selectedCredential={selectedCredential}
+          onCredentialChange={setSelectedCredential}
+        />
         <div className="text-[11px] text-center text-gray-400 dark:text-gray-500 mt-3 font-light">
           Ask questions about your data. BI Agent will query and analyze.
         </div>
