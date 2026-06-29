@@ -6,8 +6,8 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AI Chatbot",
-  description: "Next.js AI Chatbot Interface",
+  title: "AI4J Factory",
+  description: "AI4J Factory - AI Agent Platform",
 };
 
 export default function RootLayout({

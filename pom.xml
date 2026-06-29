@@ -19,10 +19,9 @@
         <spring-ai-alibaba.version>1.1.2.1</spring-ai-alibaba.version>
     </properties>
     <modules>
-        <module>services/ai4j-chatbot</module>
+        <module>services/ai4j-factory-service</module>
         <module>services/mcp</module>
         <module>services/agent</module>
-        <module>services/ai4j-chatbi</module>
     </modules>
 
     <dependencyManagement>

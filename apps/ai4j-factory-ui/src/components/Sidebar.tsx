@@ -1,16 +1,19 @@
-import { Plus, MessageSquare, Settings, Menu, X, Sun, Moon } from "lucide-react";
+import { Plus, MessageSquare, Settings, Menu, X, Sun, Moon, BarChart3 } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import CredentialManager from "./CredentialManager";
+import { AppMode } from "./ChatInterface";
 
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
+  activeMode: AppMode;
+  onModeChange: (mode: AppMode) => void;
 }
 
-export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, activeMode, onModeChange }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -38,16 +41,37 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         )}
       >
         <div className="p-4">
-          <button 
+          <button
              onClick={() => setIsOpen(false)}
              className="md:hidden absolute top-4 right-4 text-gray-500 hover:text-foreground"
           >
             <X size={24} />
           </button>
 
-          <button className="flex items-center gap-3 w-full px-4 py-3 rounded-full bg-input-bg hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm text-foreground mb-6 shadow-sm border border-transparent hover:border-input-border/50">
-            <Plus size={18} className="text-gray-500" />
-            <span className="font-medium">New chat</span>
+          <button
+            onClick={() => onModeChange("chat")}
+            className={clsx(
+              "flex items-center gap-3 w-full px-4 py-3 rounded-full transition-colors text-sm mb-2 shadow-sm border",
+              activeMode === "chat"
+                ? "bg-foreground text-background border-foreground"
+                : "bg-input-bg hover:bg-black/5 dark:hover:bg-white/5 text-foreground border-transparent hover:border-input-border/50"
+            )}
+          >
+            <Plus size={18} className={activeMode === "chat" ? "text-background" : "text-gray-500"} />
+            <span className="font-medium">New Chat</span>
+          </button>
+
+          <button
+            onClick={() => onModeChange("bi")}
+            className={clsx(
+              "flex items-center gap-3 w-full px-4 py-3 rounded-full transition-colors text-sm mb-6 shadow-sm border",
+              activeMode === "bi"
+                ? "bg-foreground text-background border-foreground"
+                : "bg-input-bg hover:bg-black/5 dark:hover:bg-white/5 text-foreground border-transparent hover:border-input-border/50"
+            )}
+          >
+            <BarChart3 size={18} className={activeMode === "bi" ? "text-background" : "text-gray-500"} />
+            <span className="font-medium">BI</span>
           </button>
 
           <div className="flex flex-col gap-1">
@@ -66,7 +90,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         </div>
 
         <div className="mt-auto p-4 flex flex-col gap-2">
-           <button 
+           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="flex items-center gap-3 w-full px-4 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors"
           >
@@ -77,8 +101,8 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             )}
             <span>{mounted && theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
-          
-          <button 
+
+          <button
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-3 w-full px-4 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors"
           >

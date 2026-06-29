@@ -1,6 +1,6 @@
 import { CredentialRequest, ModelCredential, ModelProvider } from "../types/credential";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api/settings';
 const DEFAULT_USER_ID = 'default-user'; // TODO: Get from auth context
 
 const headers = {
