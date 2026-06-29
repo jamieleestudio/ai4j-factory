@@ -52,7 +52,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
-      const response = await fetch(`${baseUrl}/api/bi/query`, {
+      const response = await fetch(`${baseUrl}/api/bi/query?credentialId=${selectedCredential?.id ?? ""}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: content }),
