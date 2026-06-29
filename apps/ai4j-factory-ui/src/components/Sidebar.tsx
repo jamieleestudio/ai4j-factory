@@ -51,26 +51,26 @@ export default function Sidebar({ isOpen, setIsOpen, activeMode, onModeChange }:
           <button
             onClick={() => onModeChange("chat")}
             className={clsx(
-              "flex items-center gap-3 w-full px-4 py-3 rounded-full transition-colors text-sm mb-2 shadow-sm border",
+              "flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-sm mb-2 shadow-sm border",
               activeMode === "chat"
-                ? "bg-foreground text-background border-foreground"
+                ? "bg-black/5 dark:bg-white/5 border-input-border/50"
                 : "bg-input-bg hover:bg-black/5 dark:hover:bg-white/5 text-foreground border-transparent hover:border-input-border/50"
             )}
           >
-            <Plus size={18} className={activeMode === "chat" ? "text-background" : "text-gray-500"} />
+            <Plus size={18} className="text-gray-500" />
             <span className="font-medium">New Chat</span>
           </button>
 
           <button
             onClick={() => onModeChange("bi")}
             className={clsx(
-              "flex items-center gap-3 w-full px-4 py-3 rounded-full transition-colors text-sm mb-6 shadow-sm border",
+              "flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-sm mb-2 shadow-sm border",
               activeMode === "bi"
-                ? "bg-foreground text-background border-foreground"
+                ? "bg-black/5 dark:bg-white/5 border-input-border/50"
                 : "bg-input-bg hover:bg-black/5 dark:hover:bg-white/5 text-foreground border-transparent hover:border-input-border/50"
             )}
           >
-            <BarChart3 size={18} className={activeMode === "bi" ? "text-background" : "text-gray-500"} />
+            <BarChart3 size={18} className="text-gray-500" />
             <span className="font-medium">BI</span>
           </button>
 
