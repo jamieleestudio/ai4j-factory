@@ -3,7 +3,8 @@ import { PanelLeft } from "lucide-react";
 import ChatInput from "./ChatInput";
 import MessageList from "./MessageList";
 import { credentialService } from "../services/credentialService";
-import { ModelCredential } from "../types/credential";
+import { SelectableModelOption } from "../types/credential";
+import { buildSelectableModelOptions } from "../utils/modelOptions";
 
 interface ChatAreaProps {
   isSidebarOpen: boolean;
@@ -15,9 +16,8 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
   const [isLoading, setIsLoading] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   
-  // Credential State
-  const [credentials, setCredentials] = useState<ModelCredential[]>([]);
-  const [selectedCredential, setSelectedCredential] = useState<ModelCredential | null>(null);
+  const [modelOptions, setModelOptions] = useState<SelectableModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState<SelectableModelOption | null>(null);
 
   useEffect(() => {
     loadCredentials();
@@ -25,21 +25,24 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
 
   const loadCredentials = async () => {
     try {
-      const creds = await credentialService.getCredentials();
-      const activeCreds = creds.filter(c => c.enabled);
-      setCredentials(activeCreds);
-      if (activeCreds.length > 0) {
-        setSelectedCredential(activeCreds[0]);
+      const [creds, configs] = await Promise.all([
+        credentialService.getCredentials(),
+        credentialService.getConfigs(),
+      ]);
+      const options = buildSelectableModelOptions(creds, configs);
+      setModelOptions(options);
+      if (options.length > 0) {
+        setSelectedModel(options[0]);
       }
     } catch (error) {
-      console.error("Failed to load credentials", error);
+      console.error("Failed to load model options", error);
     }
   };
 
   const handleSendMessage = (content: string) => {
     if (isLoading) return;
-    if (!selectedCredential) {
-      alert("Please select a model credential first.");
+    if (!selectedModel) {
+      alert("Please select a model first.");
       return;
     }
 
@@ -57,7 +60,7 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
     // Use explicit backend URL to avoid Next.js proxy buffering in dev mode
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
     // Use the credential-specific endpoint
-    const url = `${baseUrl}/api/chat/stream/${selectedCredential.id}?message=${encodeURIComponent(content)}`;
+    const url = `${baseUrl}/api/chat/stream/${selectedModel.credentialId}?message=${encodeURIComponent(content)}&model=${encodeURIComponent(selectedModel.modelName)}`;
     
     const es = new EventSource(url, { withCredentials: true });
     
@@ -128,9 +131,9 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
         <ChatInput
           onSend={handleSendMessage}
           isLoading={isLoading}
-          credentials={credentials}
-          selectedCredential={selectedCredential}
-          onCredentialChange={setSelectedCredential}
+          modelOptions={modelOptions}
+          selectedModel={selectedModel}
+          onModelChange={setSelectedModel}
         />
         <div className="text-[11px] text-center text-gray-400 dark:text-gray-500 mt-3 font-light">
           Gemini may display inaccurate info, including about people, so double-check its responses.

@@ -35,6 +35,11 @@
         "type": "STRING"
       },
       {
+        "name": "签单人",
+        "column": "signed_by",
+        "type": "STRING"
+      },
+      {
         "name": "下单时间",
         "column": "created_at",
         "type": "TIME"

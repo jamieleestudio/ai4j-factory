@@ -82,6 +82,7 @@ public class ChatClientFactory {
                 .options(OpenAiChatOptions.builder()
                         .model(modelName)
                         .temperature(0.7)
+                        .streamUsage(true)
                         .build())
                 .build();
 

@@ -1,17 +1,17 @@
 import { SendHorizontal, Paperclip, Mic, Image as ImageIcon, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import clsx from "clsx";
-import { ModelCredential } from "../types/credential";
+import { SelectableModelOption } from "../types/credential";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   isLoading: boolean;
-  credentials: ModelCredential[];
-  selectedCredential: ModelCredential | null;
-  onCredentialChange: (cred: ModelCredential) => void;
+  modelOptions: SelectableModelOption[];
+  selectedModel: SelectableModelOption | null;
+  onModelChange: (model: SelectableModelOption) => void;
 }
 
-export default function ChatInput({ onSend, isLoading, credentials, selectedCredential, onCredentialChange }: ChatInputProps) {
+export default function ChatInput({ onSend, isLoading, modelOptions, selectedModel, onModelChange }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -75,7 +75,7 @@ export default function ChatInput({ onSend, isLoading, credentials, selectedCred
                       className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-500 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors"
                     >
                       <span className="max-w-[100px] truncate">
-                        {selectedCredential ? selectedCredential.provider.name : "Auto"}
+                        {selectedModel ? selectedModel.modelName : "Select model"}
                       </span>
                       <ChevronDown size={14} />
                     </button>
@@ -87,25 +87,25 @@ export default function ChatInput({ onSend, isLoading, credentials, selectedCred
                           onClick={() => setIsDropdownOpen(false)}
                         />
                         <div className="absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-[#1E1F20] border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-20 py-1 max-h-64 overflow-y-auto">
-                          {credentials.length === 0 ? (
+                          {modelOptions.length === 0 ? (
                             <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                              No active credentials found.
+                              No model configs available.
                             </div>
                           ) : (
-                            credentials.map((cred) => (
+                            modelOptions.map((model) => (
                               <button
-                                key={cred.id}
+                                key={model.id}
                                 onClick={() => {
-                                  onCredentialChange(cred);
+                                  onModelChange(model);
                                   setIsDropdownOpen(false);
                                 }}
                                 className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 transition-colors ${
-                                  selectedCredential?.id === cred.id ? "bg-gray-50 dark:bg-white/5 font-medium" : ""
+                                  selectedModel?.id === model.id ? "bg-gray-50 dark:bg-white/5 font-medium" : ""
                                 }`}
                               >
-                                <div className="text-foreground">{cred.provider.name}</div>
+                                <div className="text-foreground truncate">{model.modelName}</div>
                                 <div className="text-xs text-gray-500 truncate">
-                                  {cred.apiKey.substring(0, 8)}...
+                                  {model.provider.name}
                                 </div>
                               </button>
                             ))

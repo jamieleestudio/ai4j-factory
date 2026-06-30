@@ -31,7 +31,7 @@ public class IntentExtractionService {
     public QueryIntent extract(String question, Long credentialId, String modelName) {
         var chatClient = chatClientFactory.create(credentialId, modelName);
         String prompt = buildExtractionPrompt(question);
-        QueryIntent intent = null;
+        QueryIntent intent;
         String lastResponse = null;
 
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -77,8 +77,8 @@ public class IntentExtractionService {
 
                 ## 规则
                 1. 只使用上面列出的主题、指标和维度名称
-                2. 指标名称和维度名称必须与上面列出的一模一样
-                3. 如果用户的指标没有明确指定，默认使用第一个指标
+                2. 指标名称和维度名称与上面列出的一模一样则直接查询，如果不确定需要将指标和维度给到用户让用户选择
+                3. 如果用户的指标没有明确指定，列出指标让用户选择
                 4. 如果用户没有提到任何维度，dimensions 返回空数组
                 5. 如果用户提到了过滤条件（如"华东区"、"电子产品"），放到 filters 数组中
                 6. filters 中 operator 取值为 "=" 或 "!=" 或 ">" 或 "<"

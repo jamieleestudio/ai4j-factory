@@ -26,7 +26,7 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
   }, [messages, isLoading]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 scrollbar-thin scrollbar-thumb-accent scrollbar-track-transparent">
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 no-scrollbar">
       {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center opacity-50">
               <Sparkles size={48} className="mb-4 text-gray-400" />
@@ -117,7 +117,7 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
       )}
       
       {/* Spacer for bottom input area */}
-      <div ref={bottomRef} className="h-4" />
+      {(messages.length > 0 || isLoading) && <div ref={bottomRef} className="h-4" />}
     </div>
   );
 }

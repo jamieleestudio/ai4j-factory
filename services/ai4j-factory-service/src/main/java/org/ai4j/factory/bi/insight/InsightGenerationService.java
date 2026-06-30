@@ -4,6 +4,7 @@ import org.ai4j.factory.chat.ChatClientFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.Map;
 public class InsightGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(InsightGenerationService.class);
+    private static final String CHART_MARKER = "<<CHART:";
 
     private final ChatClientFactory chatClientFactory;
 
@@ -29,6 +31,45 @@ public class InsightGenerationService {
         String prompt = buildInsightPrompt(question, data);
         String response = chatClient.prompt().user(prompt).call().content();
         return parseInsightResponse(question, data, response);
+    }
+
+    public Flux<String> generateStream(String question, List<Map<String, Object>> data,
+                                        Long credentialId, String modelName) {
+        if (data == null || data.isEmpty()) {
+            return Flux.just("没有查询到符合条件的数据。", CHART_MARKER + "single_value>>");
+        }
+
+        var chatClient = chatClientFactory.create(credentialId, modelName);
+        String prompt = buildStreamingPrompt(question, data);
+        return chatClient.prompt().user(prompt).stream().content();
+    }
+
+    public String extractChartType(String fullText) {
+        int markerStart = fullText.lastIndexOf(CHART_MARKER);
+        if (markerStart >= 0) {
+            int valueStart = markerStart + CHART_MARKER.length();
+            int valueEnd = fullText.indexOf(">>", valueStart);
+            if (valueEnd > valueStart) {
+                return fullText.substring(valueStart, valueEnd).trim();
+            }
+        }
+        return "bar";
+    }
+
+    public String stripChartMarker(String text) {
+        int markerStart = text.lastIndexOf(CHART_MARKER);
+        if (markerStart >= 0) {
+            return text.substring(0, markerStart).trim();
+        }
+        return text;
+    }
+
+    private String buildStreamingPrompt(String question, List<Map<String, Object>> data) {
+        return buildInsightPrompt(question, data) + """
+
+                ## 输出格式
+                直接输出自然语言总结，不要JSON格式。在最后单独一行输出图表类型标记: <<CHART:图表类型>>
+                """;
     }
 
     private String buildInsightPrompt(String question, List<Map<String, Object>> data) {
@@ -65,9 +106,6 @@ public class InsightGenerationService {
                 - bar: 柱状图（分类对比）
                 - line: 折线图（时间序列）
                 - pie: 饼图（占比）
-
-                ## 输出格式（只返回 JSON，不要其他文字）
-                {"summary": "数据总结", "chartType": "bar"}
                 """.formatted(question, dataStr.toString());
     }
 

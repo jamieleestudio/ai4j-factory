@@ -1,9 +1,10 @@
 export interface ModelProvider {
   id: number;
   name: string;
-  code: string;
+  baseUrl?: string;
+  code?: string;
   description: string;
-  icon: string;
+  icon?: string;
 }
 
 export interface ModelCredential {
@@ -15,6 +16,24 @@ export interface ModelCredential {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ModelConfig {
+  id: number;
+  name: string;
+  provider: ModelProvider;
+  modelName: string;
+  parameters: Record<string, unknown> | null;
+  version: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SelectableModelOption {
+  id: string;
+  credentialId: number;
+  modelName: string;
+  provider: ModelProvider;
 }
 
 export interface CredentialRequest {

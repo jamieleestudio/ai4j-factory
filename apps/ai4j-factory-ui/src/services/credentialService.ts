@@ -1,4 +1,4 @@
-import { CredentialRequest, ModelCredential, ModelProvider } from "../types/credential";
+import { CredentialRequest, ModelConfig, ModelCredential, ModelProvider } from "../types/credential";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api/settings';
 const DEFAULT_USER_ID = 'default-user'; // TODO: Get from auth context
@@ -57,6 +57,12 @@ export const credentialService = {
   getProviders: async (): Promise<ModelProvider[]> => {
     const response = await fetch(`${API_BASE_URL}/providers`, { headers });
     if (!response.ok) throw new Error('Failed to fetch providers');
+    return response.json();
+  },
+
+  getConfigs: async (): Promise<ModelConfig[]> => {
+    const response = await fetch(`${API_BASE_URL}/configs`, { headers });
+    if (!response.ok) throw new Error('Failed to fetch model configs');
     return response.json();
   },
 };

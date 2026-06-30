@@ -1,6 +1,5 @@
 package org.ai4j.factory.chat;
 
-import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -13,8 +12,8 @@ public class ChatService {
         this.chatClientFactory = chatClientFactory;
     }
 
-    public Flux<ChatResponse> streamChat(Long credentialId, String message, String modelName) {
+    public Flux<String> streamChat(Long credentialId, String message, String modelName) {
         var chatClient = chatClientFactory.create(credentialId, modelName);
-        return chatClient.prompt().user(message).stream().chatResponse();
+        return chatClient.prompt().user(message).stream().content();
     }
 }
