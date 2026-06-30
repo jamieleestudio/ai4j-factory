@@ -1,5 +1,7 @@
 package org.ai4j.factory.chat;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.openai.client.OpenAIClient;
 import com.openai.client.OpenAIClientAsync;
 import com.openai.client.OpenAIClientAsyncImpl;
@@ -18,13 +20,34 @@ import java.time.Duration;
 @Component
 public class ChatClientFactory {
 
+    private static final String DEFAULT_MODEL = "deepseek-chat";
+
     private final ModelCredentialRepository credentialRepository;
+    private final Cache<ChatClientCacheKey, ChatClient> cache;
 
     public ChatClientFactory(ModelCredentialRepository credentialRepository) {
         this.credentialRepository = credentialRepository;
+        this.cache = Caffeine.newBuilder()
+                .maximumSize(100)
+                .expireAfterAccess(Duration.ofMinutes(30))
+                .build();
     }
 
     public ChatClient create(Long credentialId, String modelName) {
+        String normalizedModelName = normalizeModelName(modelName);
+        return cache.get(new ChatClientCacheKey(credentialId, normalizedModelName),
+                key -> buildChatClient(key.credentialId(), key.modelName()));
+    }
+
+    public void evict(Long credentialId, String modelName) {
+        cache.invalidate(new ChatClientCacheKey(credentialId, normalizeModelName(modelName)));
+    }
+
+    public void evictCredential(Long credentialId) {
+        cache.asMap().keySet().removeIf(key -> key.credentialId().equals(credentialId));
+    }
+
+    private ChatClient buildChatClient(Long credentialId, String modelName) {
         ModelCredential credential = credentialRepository.findById(credentialId)
                 .orElseThrow(() -> new RuntimeException("Credential not found with id: " + credentialId));
 
@@ -57,11 +80,21 @@ public class ChatClientFactory {
                 .openAiClient(openAiClient)
                 .openAiClientAsync(openAiClientAsync)
                 .options(OpenAiChatOptions.builder()
-                        .model(modelName != null && !modelName.isEmpty() ? modelName : "deepseek-chat")
+                        .model(modelName)
                         .temperature(0.7)
                         .build())
                 .build();
 
         return ChatClient.builder(chatModel).build();
+    }
+
+    private String normalizeModelName(String modelName) {
+        if (modelName == null || modelName.isBlank()) {
+            return DEFAULT_MODEL;
+        }
+        return modelName;
+    }
+
+    private record ChatClientCacheKey(Long credentialId, String modelName) {
     }
 }

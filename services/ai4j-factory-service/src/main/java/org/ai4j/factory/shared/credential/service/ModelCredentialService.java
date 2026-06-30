@@ -1,5 +1,6 @@
 package org.ai4j.factory.shared.credential.service;
 
+import org.ai4j.factory.chat.ChatClientFactory;
 import org.ai4j.factory.shared.credential.entity.ModelCredential;
 import org.ai4j.factory.shared.credential.entity.ModelProvider;
 import org.ai4j.factory.shared.credential.repository.ModelCredentialRepository;
@@ -14,10 +15,14 @@ public class ModelCredentialService {
 
     private final ModelCredentialRepository credentialRepository;
     private final ModelProviderRepository providerRepository;
+    private final ChatClientFactory chatClientFactory;
 
-    public ModelCredentialService(ModelCredentialRepository credentialRepository, ModelProviderRepository providerRepository) {
+    public ModelCredentialService(ModelCredentialRepository credentialRepository,
+                                  ModelProviderRepository providerRepository,
+                                  ChatClientFactory chatClientFactory) {
         this.credentialRepository = credentialRepository;
         this.providerRepository = providerRepository;
+        this.chatClientFactory = chatClientFactory;
     }
 
     public List<ModelCredential> getCredentialsByUserId(String userId) {
@@ -45,6 +50,7 @@ public class ModelCredentialService {
     @Transactional
     public void deleteCredential(Long id) {
         credentialRepository.deleteById(id);
+        chatClientFactory.evictCredential(id);
     }
 
     @Transactional
@@ -52,7 +58,9 @@ public class ModelCredentialService {
         ModelCredential credential = credentialRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Credential not found"));
         credential.setApiKey(apiKey);
-        return credentialRepository.save(credential);
+        ModelCredential saved = credentialRepository.save(credential);
+        chatClientFactory.evictCredential(id);
+        return saved;
     }
 
     @Transactional
@@ -60,6 +68,8 @@ public class ModelCredentialService {
         ModelCredential credential = credentialRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Credential not found"));
         credential.setEnabled(enabled);
-        return credentialRepository.save(credential);
+        ModelCredential saved = credentialRepository.save(credential);
+        chatClientFactory.evictCredential(id);
+        return saved;
     }
 }
