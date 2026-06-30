@@ -56,12 +56,24 @@ public class InsightGenerationService {
         return "bar";
     }
 
-    public String stripChartMarker(String text) {
-        int markerStart = text.lastIndexOf(CHART_MARKER);
+    public int safeDisplayLength(String fullText) {
+        int markerStart = fullText.lastIndexOf(CHART_MARKER);
         if (markerStart >= 0) {
-            return text.substring(0, markerStart).trim();
+            return markerStart;
         }
-        return text;
+        int holdback = partialMarkerPrefixLength(fullText);
+        return fullText.length() - holdback;
+    }
+
+    private int partialMarkerPrefixLength(String fullText) {
+        int max = Math.min(fullText.length(), CHART_MARKER.length());
+        for (int len = max; len >= 1; len--) {
+            String suffix = fullText.substring(fullText.length() - len);
+            if (CHART_MARKER.startsWith(suffix)) {
+                return len;
+            }
+        }
+        return 0;
     }
 
     private String buildStreamingPrompt(String question, List<Map<String, Object>> data) {

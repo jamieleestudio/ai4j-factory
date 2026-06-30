@@ -32,11 +32,39 @@ vi.mock("../services/credentialService", () => ({
   },
 }));
 
-function createFetchResponse(body: unknown) {
+function createSSEResponse(events: object[]): Response {
+  const encoder = new TextEncoder();
+  const payload = events.map((e) => `data: ${JSON.stringify(e)}\n`).join("");
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(payload));
+      controller.close();
+    },
+  });
   return {
     ok: true,
-    json: async () => body,
-  };
+    status: 200,
+    statusText: "OK",
+    body: stream,
+  } as unknown as Response;
+}
+
+function biEvents(summary: string, data: Record<string, unknown>[], chartType: string) {
+  return [
+    { type: "status", stage: "analyzing", message: "正在分析你的问题..." },
+    {
+      type: "intent",
+      subject: "orders",
+      metrics: ["sales_amount"],
+      dimensions: ["region"],
+      filters: [{ dimension: "region", operator: "=", value: "华东" }],
+    },
+    { type: "status", stage: "querying", message: "正在查询数据库..." },
+    { type: "status", stage: "insight", message: `查询到 ${data.length} 条记录，正在生成洞察...` },
+    { type: "chunk", content: summary },
+    { type: "result", chartType, data, rowCount: data.length },
+    { type: "done" },
+  ];
 }
 
 describe("BiArea", () => {
@@ -57,33 +85,24 @@ describe("BiArea", () => {
 
     mockFetch
       .mockResolvedValueOnce(
-        createFetchResponse({
-          question: "华东区销售额多少",
-          summary: "华东区销售额为 100。",
-          data: [{ region: "华东", amount: 100 }],
-          chartType: "single_value",
-        })
+        createSSEResponse(
+          biEvents("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value")
+        )
       )
       .mockResolvedValueOnce(
-        createFetchResponse({
-          question: "华南区销售额多少",
-          summary: "华南区销售额为 200。",
-          data: [{ region: "华南", amount: 200 }],
-          chartType: "bar",
-        })
+        createSSEResponse(
+          biEvents("华南区销售额为 200。", [{ region: "华南", amount: 200 }], "bar")
+        )
       );
 
     const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
 
-    // Wait for model selector to show "gpt-test" (credentials loaded)
     await screen.findByText("gpt-test");
 
-    // Type first question and send via Enter
     const input = screen.getByPlaceholderText("Ask anything...");
     await user.type(input, "华东区销售额多少");
     await user.keyboard("{Enter}");
 
-    // Wait for first result to appear
     await waitFor(() => {
       expect(container.textContent).toContain("华东区销售额多少");
     });
@@ -91,11 +110,9 @@ describe("BiArea", () => {
       expect(container.textContent).toContain("华东区销售额为 100。");
     });
 
-    // Type second question and send
     await user.type(input, "华南区销售额多少");
     await user.keyboard("{Enter}");
 
-    // Wait for second result to appear
     await waitFor(() => {
       expect(container.textContent).toContain("华南区销售额多少");
     });
@@ -103,8 +120,38 @@ describe("BiArea", () => {
       expect(container.textContent).toContain("华南区销售额为 200。");
     });
 
-    // BOTH previous questions and summaries should still be visible
     expect(container.textContent).toContain("华东区销售额多少");
     expect(container.textContent).toContain("华东区销售额为 100。");
+  });
+
+  test("renders intent thinking block and does not leak chart marker", async () => {
+    const user = userEvent.setup();
+
+    mockFetch.mockResolvedValueOnce(
+      createSSEResponse(
+        biEvents("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value")
+      )
+    );
+
+    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+
+    await screen.findByText("gpt-test");
+
+    const input = screen.getByPlaceholderText("Ask anything...");
+    await user.type(input, "华东区销售额多少");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("华东区销售额为 100。");
+    });
+
+    // Intent thinking block renders semantic layer
+    expect(container.textContent).toContain("orders");
+    expect(container.textContent).toContain("sales_amount");
+    expect(container.textContent).toContain("region");
+    expect(container.textContent).toContain("Thinking");
+
+    // No chart marker leaks into the rendered output
+    expect(container.textContent).not.toContain("<<CHART:");
   });
 });

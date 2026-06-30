@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PanelLeft, BarChart3, Loader2 } from "lucide-react";
+import { PanelLeft, BarChart3, Loader2, Brain } from "lucide-react";
 import ChatInput from "./ChatInput";
 import { credentialService } from "../services/credentialService";
 import { SelectableModelOption } from "../types/credential";
 import { buildSelectableModelOptions } from "../utils/modelOptions";
-import { fetchSSE } from "../utils/fetchSSE";
+import { fetchSSE, IntentPayload } from "../utils/fetchSSE";
 
 interface BiAreaProps {
   isSidebarOpen: boolean;
@@ -22,16 +22,60 @@ interface InsightResult {
 
 type BiMessage =
   | { id: string; role: "user"; content: string }
-  | { id: string; role: "assistant"; status: "loading" | "streaming" | "success" | "error"; progressText?: string; streamingText?: string; result?: InsightResult; error?: string };
+  | {
+      id: string;
+      role: "assistant";
+      status: "loading" | "streaming" | "success" | "error";
+      progressText?: string;
+      intent?: IntentPayload;
+      streamingText?: string;
+      result?: InsightResult;
+      error?: string;
+    };
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-function stripChartMarker(text: string): string {
-  const idx = text.lastIndexOf("<<CHART:");
-  if (idx === -1) return text;
-  const end = text.indexOf(">>", idx);
-  if (end === -1) return text.substring(0, idx).trimEnd();
-  return (text.substring(0, idx) + text.substring(end + 2)).trim();
+function ThinkingBlock({ intent, progressText }: { intent?: IntentPayload; progressText?: string }) {
+  if (!intent && !progressText) return null;
+  return (
+    <div className="p-3 bg-gray-50 dark:bg-gray-900/40 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+        <Brain size={14} />
+        <span>Thinking</span>
+      </div>
+      {progressText && (
+        <div className="text-gray-600 dark:text-gray-300 mb-2">{progressText}</div>
+      )}
+      {intent && (
+        <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+          <div>
+            <span className="text-gray-400">Subject: </span>
+            <span className="font-medium text-foreground">{intent.subject}</span>
+          </div>
+          {intent.metrics.length > 0 && (
+            <div>
+              <span className="text-gray-400">Metrics: </span>
+              <span className="font-medium text-foreground">{intent.metrics.join(", ")}</span>
+            </div>
+          )}
+          {intent.dimensions.length > 0 && (
+            <div>
+              <span className="text-gray-400">Dimensions: </span>
+              <span className="font-medium text-foreground">{intent.dimensions.join(", ")}</span>
+            </div>
+          )}
+          {intent.filters.length > 0 && (
+            <div>
+              <span className="text-gray-400">Filters: </span>
+              <span className="font-medium text-foreground">
+                {intent.filters.map((f) => `${f.dimension} ${f.operator} ${f.value}`).join("; ")}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
@@ -96,7 +140,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
       credentialId: selectedModel.credentialId,
       modelName: selectedModel.modelName,
     }, {
-      onProgress: (message) => {
+      onStatus: (_stage, message) => {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
@@ -105,45 +149,40 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
           )
         );
       },
+      onIntent: (intent) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId ? { ...msg, intent } : msg
+          )
+        );
+      },
       onChunk: (text) => {
         fullText += text;
-        const displayText = stripChartMarker(fullText);
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
-              ? { ...msg, status: "streaming" as const, streamingText: displayText }
+              ? { ...msg, status: "streaming" as const, streamingText: fullText }
               : msg
           )
         );
       },
-      onResult: (data) => {
-        try {
-          const parsed = JSON.parse(data);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMsgId
-                ? {
-                    ...msg,
-                    status: "success" as const,
-                    result: {
-                      question: content,
-                      summary: stripChartMarker(fullText),
-                      data: parsed.data ?? [],
-                      chartType: parsed.chartType ?? "single_value",
-                    },
-                  }
-                : msg
-            )
-          );
-        } catch {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMsgId
-                ? { ...msg, status: "error" as const, error: "Failed to parse result" }
-                : msg
-            )
-          );
-        }
+      onResult: (result) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId
+              ? {
+                  ...msg,
+                  status: "success" as const,
+                  result: {
+                    question: content,
+                    summary: fullText,
+                    data: result.data,
+                    chartType: result.chartType,
+                  },
+                }
+              : msg
+          )
+        );
       },
       onError: (error) => {
         setMessages((prev) =>
@@ -207,18 +246,22 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
             if (msg.role === "assistant") {
               if (msg.status === "loading") {
                 return (
-                  <div key={msg.id} className="flex items-center justify-center py-12">
-                    <Loader2 size={32} className="animate-spin text-gray-400" />
-                    <span className="ml-3 text-gray-500">
-                      {msg.progressText ?? "Analyzing..."}
-                    </span>
+                  <div key={msg.id} className="space-y-3">
+                    <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 size={28} className="animate-spin text-gray-400" />
+                      <span className="ml-3 text-gray-500">
+                        {msg.progressText ?? "Analyzing..."}
+                      </span>
+                    </div>
                   </div>
                 );
               }
 
               if (msg.status === "streaming") {
                 return (
-                  <div key={msg.id} className="space-y-6">
+                  <div key={msg.id} className="space-y-3">
+                    <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Insight</div>
                       <div className="text-foreground whitespace-pre-wrap">
@@ -232,8 +275,11 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
 
               if (msg.status === "error") {
                 return (
-                  <div key={msg.id} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
-                    {msg.error}
+                  <div key={msg.id} className="space-y-3">
+                    <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
+                    <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
+                      {msg.error}
+                    </div>
                   </div>
                 );
               }
@@ -241,7 +287,8 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
               if (msg.status === "success" && msg.result) {
                 const result = msg.result;
                 return (
-                  <div key={msg.id} className="space-y-6">
+                  <div key={msg.id} className="space-y-3">
+                    <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
                     {/* Summary */}
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Insight</div>

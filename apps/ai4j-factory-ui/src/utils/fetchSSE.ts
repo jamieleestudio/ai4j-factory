@@ -1,31 +1,89 @@
-type SSEEventType = "progress" | "chunk" | "result" | "error";
+export type IntentFilter = {
+  dimension: string;
+  operator: string;
+  value: string;
+};
 
-interface SSECallbacks {
-  onProgress?: (message: string) => void;
-  onChunk?: (text: string) => void;
-  onResult?: (data: string) => void;
-  onError?: (error: string) => void;
+export type IntentPayload = {
+  subject: string;
+  metrics: string[];
+  dimensions: string[];
+  filters: IntentFilter[];
+};
+
+export type ResultPayload = {
+  chartType: string;
+  data: Record<string, unknown>[];
+  rowCount: number;
+};
+
+export type SseEvent =
+  | { type: "status"; stage: string; message: string }
+  | { type: "intent"; subject: string; metrics: string[]; dimensions: string[]; filters: IntentFilter[] }
+  | { type: "chunk"; content: string }
+  | { type: "result"; chartType: string; data: Record<string, unknown>[]; rowCount: number }
+  | { type: "error"; message: string }
+  | { type: "done" };
+
+export interface SSECallbacks {
+  onStatus?: (stage: string, message: string) => void;
+  onIntent?: (intent: IntentPayload) => void;
+  onChunk?: (content: string) => void;
+  onResult?: (result: ResultPayload) => void;
+  onError?: (message: string) => void;
   onDone?: () => void;
 }
 
-export function parseSSELine(line: string): { type: SSEEventType; content: string } | null {
+export function parseSSEPayload(data: string): SseEvent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    return null;
+  }
+  if (parsed == null || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") {
+    return null;
+  }
+  return parsed as SseEvent;
+}
+
+export function parseSSELine(line: string): SseEvent | null {
   if (!line.startsWith("data:")) return null;
   let data = line.slice(5);
   if (data.startsWith(" ")) data = data.slice(1);
+  return parseSSEPayload(data);
+}
 
-  if (data.startsWith("[progress] ")) {
-    return { type: "progress", content: data.slice(11) };
+function dispatch(event: SseEvent, callbacks: SSECallbacks): void {
+  switch (event.type) {
+    case "status":
+      callbacks.onStatus?.(event.stage, event.message);
+      break;
+    case "intent":
+      callbacks.onIntent?.({
+        subject: event.subject,
+        metrics: event.metrics,
+        dimensions: event.dimensions,
+        filters: event.filters,
+      });
+      break;
+    case "chunk":
+      callbacks.onChunk?.(event.content);
+      break;
+    case "result":
+      callbacks.onResult?.({
+        chartType: event.chartType,
+        data: event.data,
+        rowCount: event.rowCount,
+      });
+      break;
+    case "error":
+      callbacks.onError?.(event.message);
+      break;
+    case "done":
+      callbacks.onDone?.();
+      break;
   }
-  if (data.startsWith("[chunk] ")) {
-    return { type: "chunk", content: data.slice(8) };
-  }
-  if (data.startsWith("[result] ")) {
-    return { type: "result", content: data.slice(9) };
-  }
-  if (data.startsWith("[error] ")) {
-    return { type: "error", content: data.slice(8) };
-  }
-  return null;
 }
 
 export async function fetchSSE(
@@ -41,12 +99,14 @@ export async function fetchSSE(
 
   if (!response.ok) {
     callbacks.onError?.(`HTTP ${response.status}: ${response.statusText}`);
+    callbacks.onDone?.();
     return;
   }
 
   const reader = response.body?.getReader();
   if (!reader) {
     callbacks.onError?.("Response body is not readable");
+    callbacks.onDone?.();
     return;
   }
 
@@ -69,20 +129,7 @@ export async function fetchSSE(
         const parsed = parseSSELine(trimmed);
         if (!parsed) continue;
 
-        switch (parsed.type) {
-          case "progress":
-            callbacks.onProgress?.(parsed.content);
-            break;
-          case "chunk":
-            callbacks.onChunk?.(parsed.content);
-            break;
-          case "result":
-            callbacks.onResult?.(parsed.content);
-            break;
-          case "error":
-            callbacks.onError?.(parsed.content);
-            break;
-        }
+        dispatch(parsed, callbacks);
 
         // Yield to the browser so React can paint each chunk individually,
         // producing a character-by-character streaming effect.
