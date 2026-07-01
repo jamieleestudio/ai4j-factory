@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { inferChartPool } from "./chartPool";
-import type { IntentPayload } from "../utils/fetchSSE";
+import type { IntentPayload } from "../utils/sse";
 
 function intent(
   dimensions: IntentPayload["dimensions"],

@@ -5,7 +5,7 @@ import MessageList from "./MessageList";
 import { credentialService } from "../services/credentialService";
 import { SelectableModelOption } from "../types/credential";
 import { buildSelectableModelOptions } from "../utils/modelOptions";
-import { parseSSEPayload } from "../utils/fetchSSE";
+import { subscribeSSE, type SSESubscription } from "../utils/sse";
 
 interface ChatAreaProps {
   isSidebarOpen: boolean;
@@ -15,7 +15,7 @@ interface ChatAreaProps {
 export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const subscriptionRef = useRef<SSESubscription | null>(null);
   
   const [modelOptions, setModelOptions] = useState<SelectableModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<SelectableModelOption | null>(null);
@@ -47,8 +47,9 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
       return;
     }
 
-    if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+    if (subscriptionRef.current) {
+        subscriptionRef.current.close();
+        subscriptionRef.current = null;
     }
 
     // Add user message immediately
@@ -62,66 +63,50 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
     // Use the credential-specific endpoint
     const url = `${baseUrl}/api/chat/stream/${selectedModel.credentialId}?message=${encodeURIComponent(content)}&model=${encodeURIComponent(selectedModel.modelName)}`;
-    
-    const es = new EventSource(url, { withCredentials: true });
 
-    const closeStream = () => {
-        es.close();
-        setIsLoading(false);
-        eventSourceRef.current = null;
-    };
-
-    es.onmessage = (e) => {
-        const event = parseSSEPayload(e.data);
-        if (!event) return;
-
-        if (event.type === "chunk") {
+    const sub = subscribeSSE(url, {
+        onChunk: (chunk) => {
             setMessages(prev => {
                 const newMsgs = [...prev];
                 const lastMsg = newMsgs[newMsgs.length - 1];
                 if (lastMsg && lastMsg.role === "ai") {
                     newMsgs[newMsgs.length - 1] = {
                         ...lastMsg,
-                        content: lastMsg.content + event.content
+                        content: lastMsg.content + chunk
                     };
                 }
                 return newMsgs;
             });
-        } else if (event.type === "done") {
-            closeStream();
-        } else if (event.type === "error") {
+        },
+        onDone: () => {
+            setIsLoading(false);
+            subscriptionRef.current?.close();
+            subscriptionRef.current = null;
+        },
+        onError: (message) => {
             setMessages(prev => {
                 const newMsgs = [...prev];
                 const lastMsg = newMsgs[newMsgs.length - 1];
                 if (lastMsg && lastMsg.role === "ai") {
                     newMsgs[newMsgs.length - 1] = {
                         ...lastMsg,
-                        content: lastMsg.content + `\n[error] ${event.message}`
+                        content: lastMsg.content + `\n[error] ${message}`
                     };
                 }
                 return newMsgs;
             });
-            closeStream();
-        }
-    };
-
-    es.onerror = () => {
-        // Real network/server error (done event handles normal completion).
-        closeStream();
-    };
-
-    es.onopen = () => {
-        // Connection opened
-    };
-
-    eventSourceRef.current = es;
+            setIsLoading(false);
+            subscriptionRef.current?.close();
+            subscriptionRef.current = null;
+        },
+    });
+    subscriptionRef.current = sub;
   };
 
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+      subscriptionRef.current?.close();
+      subscriptionRef.current = null;
     };
   }, []);
 

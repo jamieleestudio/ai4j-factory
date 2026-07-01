@@ -53,6 +53,10 @@ export interface SSECallbacks {
   onDone?: () => void;
 }
 
+export type SSESubscription = {
+  close: () => void;
+};
+
 export function parseSSEPayload(data: string): SseEvent | null {
   let parsed: unknown;
   try {
@@ -112,60 +116,29 @@ function dispatch(event: SseEvent, callbacks: SSECallbacks): void {
   }
 }
 
-export async function fetchSSE(
-  url: string,
-  body: unknown,
-  callbacks: SSECallbacks
-): Promise<void> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+export function subscribeSSE(url: string, callbacks: SSECallbacks): SSESubscription {
+  const es = new EventSource(url, { withCredentials: true });
+  let closed = false;
 
-  if (!response.ok) {
-    callbacks.onError?.(`HTTP ${response.status}: ${response.statusText}`);
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    es.close();
+  };
+
+  es.onmessage = (e) => {
+    if (closed) return;
+    const event = parseSSEPayload(e.data);
+    if (!event) return;
+    dispatch(event, callbacks);
+  };
+
+  es.onerror = () => {
+    if (closed) return;
+    callbacks.onError?.("SSE connection error");
     callbacks.onDone?.();
-    return;
-  }
+    close();
+  };
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    callbacks.onError?.("Response body is not readable");
-    callbacks.onDone?.();
-    return;
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        const parsed = parseSSELine(trimmed);
-        if (!parsed) continue;
-
-        dispatch(parsed, callbacks);
-
-        // Yield to the browser so React can paint each chunk individually,
-        // producing a character-by-character streaming effect.
-        await new Promise((r) => setTimeout(r, 0));
-      }
-    }
-  } catch (err) {
-    callbacks.onError?.(err instanceof Error ? err.message : "Stream read failed");
-  } finally {
-    reader.releaseLock();
-    callbacks.onDone?.();
-  }
+  return { close };
 }

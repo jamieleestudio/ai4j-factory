@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EChartsOption } from "echarts";
 import { buildOption } from "./chartOption";
-import type { IntentPayload } from "../utils/fetchSSE";
+import type { IntentPayload } from "../utils/sse";
 
 function intent(
   dimensions: IntentPayload["dimensions"],

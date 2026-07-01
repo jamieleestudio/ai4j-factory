@@ -9,7 +9,7 @@ import Markdown from "./Markdown";
 import { credentialService } from "../services/credentialService";
 import { SelectableModelOption } from "../types/credential";
 import { buildSelectableModelOptions } from "../utils/modelOptions";
-import { fetchSSE, IntentPayload, ClarificationOption } from "../utils/fetchSSE";
+import { subscribeSSE, type SSESubscription, IntentPayload, ClarificationOption } from "../utils/sse";
 import { inferChartPool } from "../lib/chartPool";
 import { isChartType, type ChartType } from "../lib/chartTypes";
 
@@ -126,6 +126,14 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const pendingSessionIdRef = useRef<string | null>(null);
   const suppressScrollRef = useRef(false);
+  const subscriptionRef = useRef<SSESubscription | null>(null);
+
+  useEffect(() => {
+    return () => {
+      subscriptionRef.current?.close();
+      subscriptionRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (suppressScrollRef.current) {
@@ -180,13 +188,16 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
     setIsLoading(true);
 
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+    const params = new URLSearchParams();
+    params.set("question", content);
+    params.set("credentialId", String(selectedModel.credentialId));
+    if (selectedModel.modelName) params.set("modelName", selectedModel.modelName);
+    const sid = sessionId ?? pendingSessionIdRef.current;
+    if (sid) params.set("sessionId", sid);
+    const url = `${baseUrl}/api/bi/query?${params.toString()}`;
 
-    await fetchSSE(`${baseUrl}/api/bi/query`, {
-      question: content,
-      credentialId: selectedModel.credentialId,
-      modelName: selectedModel.modelName,
-      sessionId: sessionId ?? pendingSessionIdRef.current,
-    }, {
+    subscriptionRef.current?.close();
+    const sub = subscribeSSE(url, {
       onStatus: (_stage, message) => {
         setMessages((prev) =>
           prev.map((msg) =>
@@ -271,8 +282,11 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
       },
       onDone: () => {
         setIsLoading(false);
+        subscriptionRef.current?.close();
+        subscriptionRef.current = null;
       },
     });
+    subscriptionRef.current = sub;
   };
 
   const handleChipSelect = (assistantMsgId: string, value: string) => {

@@ -59,9 +59,12 @@ public class BiController {
         this.clarificationStore = clarificationStore;
     }
 
-    @PostMapping(value = "/query", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> query(@RequestBody QueryRequest request) {
-        log.info("BI query: {}, sessionId: {}", request.question(), request.sessionId());
+    @GetMapping(value = "/query", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> query(@RequestParam String question,
+                              @RequestParam Long credentialId,
+                              @RequestParam(required = false) String modelName,
+                              @RequestParam(required = false) String sessionId) {
+        log.info("BI query: {}, sessionId: {}", question, sessionId);
 
         return Flux.create(sink -> {
             StringBuilder fullText = new StringBuilder();
@@ -71,21 +74,21 @@ public class BiController {
                 sink.next(SseEventSerializer.toJson(new StatusEvent("analyzing", "正在分析你的问题...")));
 
                 PendingClarification context = null;
-                if (request.sessionId() != null) {
-                    context = clarificationStore.get(request.sessionId()).orElse(null);
+                if (sessionId != null) {
+                    context = clarificationStore.get(sessionId).orElse(null);
                     if (context == null) {
-                        log.info("SessionId {} not found, falling back to fresh query", request.sessionId());
+                        log.info("SessionId {} not found, falling back to fresh query", sessionId);
                     }
                 }
 
                 IntentExtractionResult result = context != null
-                        ? intentService.extractWithContext(request.question(), context,
-                                request.credentialId(), request.modelName())
-                        : intentService.extract(request.question(),
-                                request.credentialId(), request.modelName());
+                        ? intentService.extractWithContext(question, context,
+                                credentialId, modelName)
+                        : intentService.extract(question,
+                                credentialId, modelName);
 
                 if (result instanceof IntentExtractionResult.NeedsClarification nc) {
-                    handleClarification(sink, nc, request, context);
+                    handleClarification(sink, nc, question, sessionId, credentialId, modelName, context);
                     return;
                 }
 
@@ -106,7 +109,7 @@ public class BiController {
                 sink.next(SseEventSerializer.toJson(new StatusEvent("insight",
                         "查询到 " + data.size() + " 条记录，正在生成洞察...")));
 
-                insightService.generateStream(request.question(), data, request.credentialId(), request.modelName())
+                insightService.generateStream(question, data, credentialId, modelName)
                         .doOnNext(chunk -> {
                             fullText.append(chunk);
                             int safeLen = insightService.safeDisplayLength(fullText.toString());
@@ -142,18 +145,21 @@ public class BiController {
 
     private void handleClarification(reactor.core.publisher.FluxSink<String> sink,
                                       IntentExtractionResult.NeedsClarification nc,
-                                      QueryRequest request,
+                                      String question,
+                                      String sessionIdParam,
+                                      Long credentialId,
+                                      String modelName,
                                       PendingClarification context) {
         List<ClarificationOption> options = buildClarificationOptions(nc);
 
         String sessionId;
         String originalQuestion;
         if (context != null) {
-            sessionId = request.sessionId();
+            sessionId = sessionIdParam;
             originalQuestion = context.originalQuestion();
         } else {
             sessionId = UUID.randomUUID().toString();
-            originalQuestion = request.question();
+            originalQuestion = question;
         }
 
         PendingClarification pending = new PendingClarification(
@@ -233,6 +239,4 @@ public class BiController {
                 .toList();
         return new IntentEvent(intent.getSubject(), intent.getMetrics(), dimensions, filters);
     }
-
-    public record QueryRequest(String question, Long credentialId, String modelName, String sessionId) {}
 }

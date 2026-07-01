@@ -2,7 +2,7 @@
 
 import { buildOption } from "../lib/chartOption";
 import type { ChartType } from "../lib/chartTypes";
-import type { IntentPayload } from "../utils/fetchSSE";
+import type { IntentPayload } from "../utils/sse";
 import EChart from "./EChart";
 
 interface ChartRendererProps {

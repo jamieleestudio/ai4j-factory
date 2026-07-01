@@ -53,8 +53,7 @@ class BiControllerTest {
         when(semanticLayer.getAllSubjects())
                 .thenReturn((Collection<Subject>) List.of(createSubject("订单分析", "订单数据")));
 
-        BiController.QueryRequest request = new BiController.QueryRequest("1", 1L, "model", null);
-        List<String> events = controller.query(request).collectList().block();
+        List<String> events = controller.query("1", 1L, "model", null).collectList().block();
 
         assertNotNull(events);
         String allEvents = String.join("\n", events);
@@ -73,8 +72,7 @@ class BiControllerTest {
         when(semanticLayer.getAllSubjects())
                 .thenReturn((Collection<Subject>) List.of(createSubject("订单分析", "订单数据")));
 
-        BiController.QueryRequest request = new BiController.QueryRequest("1", 1L, "model", null);
-        controller.query(request).collectList().block();
+        controller.query("1", 1L, "model", null).collectList().block();
 
         verify(clarificationStore).put(any(String.class), any(PendingClarification.class));
     }
@@ -88,8 +86,7 @@ class BiControllerTest {
         when(semanticLayer.getAllSubjects())
                 .thenReturn((Collection<Subject>) List.of(createSubject("订单分析", "订单数据")));
 
-        BiController.QueryRequest request = new BiController.QueryRequest("question", 1L, "model", "unknown-session");
-        controller.query(request).collectList().block();
+        controller.query("question", 1L, "model", "unknown-session").collectList().block();
 
         verify(intentService).extract(eq("question"), any(), any());
         verify(intentService, never()).extractWithContext(any(), any(), any(), any());
@@ -106,8 +103,7 @@ class BiControllerTest {
         Subject subject = createSubject("订单分析", "订单数据");
         when(semanticLayer.getSubject("订单分析")).thenReturn(subject);
 
-        BiController.QueryRequest request = new BiController.QueryRequest("订单分析", 1L, "model", "known-session");
-        controller.query(request).collectList().block();
+        controller.query("订单分析", 1L, "model", "known-session").collectList().block();
 
         verify(intentService).extractWithContext(eq("订单分析"), eq(context), any(), any());
         verify(intentService, never()).extract(any(), any(), any());
@@ -138,8 +134,7 @@ class BiControllerTest {
         when(insightService.safeDisplayLength(any())).thenAnswer(inv -> ((String) inv.getArgument(0)).length());
         when(insightService.extractChartType(any())).thenReturn("bar");
 
-        BiController.QueryRequest request = new BiController.QueryRequest("华东区销售额", 1L, "model", null);
-        List<String> events = controller.query(request).collectList().block();
+        List<String> events = controller.query("华东区销售额", 1L, "model", null).collectList().block();
 
         assertNotNull(events);
         String intentEvent = events.stream()

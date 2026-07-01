@@ -1,4 +1,4 @@
-import type { IntentPayload } from "../utils/fetchSSE";
+import type { IntentPayload } from "../utils/sse";
 import type { ChartType } from "./chartTypes";
 
 export function inferChartPool(

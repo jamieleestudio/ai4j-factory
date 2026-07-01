@@ -46,21 +46,33 @@ vi.mock("../services/credentialService", () => ({
   },
 }));
 
-function createSSEResponse(events: object[]): Response {
-  const encoder = new TextEncoder();
-  const payload = events.map((e) => `data: ${JSON.stringify(e)}\n`).join("");
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(encoder.encode(payload));
-      controller.close();
-    },
-  });
-  return {
-    ok: true,
-    status: 200,
-    statusText: "OK",
-    body: stream,
-  } as unknown as Response;
+type MockEventSource = {
+  url: string;
+  onmessage: ((e: { data: string }) => void) | null;
+  onerror: (() => void) | null;
+  close: ReturnType<typeof vi.fn>;
+};
+
+function installMockEventSource(): {
+  instances: MockEventSource[];
+} {
+  const instances: MockEventSource[] = [];
+  const ctor = vi.fn((url: string) => {
+    const inst: MockEventSource = {
+      url,
+      onmessage: null,
+      onerror: null,
+      close: vi.fn(),
+    };
+    instances.push(inst);
+    return inst as unknown as EventSource;
+  }) as unknown as typeof EventSource;
+  global.EventSource = ctor;
+  return { instances };
+}
+
+function emit(instance: MockEventSource, event: object): void {
+  instance.onmessage?.({ data: JSON.stringify(event) });
 }
 
 function biEvents(
@@ -94,35 +106,28 @@ function clarificationEvents(sessionId: string, message: string, options: { labe
   ];
 }
 
+function feedEvents(instance: MockEventSource, events: object[]): void {
+  for (const e of events) emit(instance, e);
+}
+
 describe("BiArea", () => {
-  let mockFetch: ReturnType<typeof vi.fn>;
+  let originalEventSource: typeof EventSource;
 
   beforeEach(() => {
-    mockFetch = vi.fn();
-    vi.stubGlobal("fetch", mockFetch);
+    originalEventSource = global.EventSource;
     Element.prototype.scrollIntoView = vi.fn();
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    global.EventSource = originalEventSource;
+    vi.clearAllMocks();
   });
 
   test("keeps both questions and results after two BI queries", async () => {
     const user = userEvent.setup();
+    const { instances } = installMockEventSource();
 
-    mockFetch
-      .mockResolvedValueOnce(
-        createSSEResponse(
-          biEvents("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value")
-        )
-      )
-      .mockResolvedValueOnce(
-        createSSEResponse(
-          biEvents("华南区销售额为 200。", [{ region: "华南", amount: 200 }], "bar")
-        )
-      );
-
-    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+    render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
 
     await screen.findByText("gpt-test");
 
@@ -131,34 +136,32 @@ describe("BiArea", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(container.textContent).toContain("华东区销售额多少");
+      expect(instances.length).toBe(1);
     });
+    feedEvents(instances[0], biEvents("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value"));
+
     await waitFor(() => {
-      expect(container.textContent).toContain("华东区销售额为 100。");
+      const markdowns = screen.getAllByTestId("markdown");
+      expect(markdowns[0].textContent).toContain("华东区销售额为 100。");
     });
 
     await user.type(input, "华南区销售额多少");
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(container.textContent).toContain("华南区销售额多少");
+      expect(instances.length).toBe(2);
     });
-    await waitFor(() => {
-      expect(container.textContent).toContain("华南区销售额为 200。");
-    });
+    feedEvents(instances[1], biEvents("华南区销售额为 200。", [{ region: "华南", amount: 200 }], "bar"));
 
-    expect(container.textContent).toContain("华东区销售额多少");
-    expect(container.textContent).toContain("华东区销售额为 100。");
+    await waitFor(() => {
+      const markdowns = screen.getAllByTestId("markdown");
+      expect(markdowns[markdowns.length - 1].textContent).toContain("华南区销售额为 200。");
+    });
   });
 
   test("renders intent thinking block and does not leak chart marker", async () => {
     const user = userEvent.setup();
-
-    mockFetch.mockResolvedValueOnce(
-      createSSEResponse(
-        biEvents("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value")
-      )
-    );
+    const { instances } = installMockEventSource();
 
     const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
 
@@ -169,38 +172,27 @@ describe("BiArea", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(container.textContent).toContain("华东区销售额为 100。");
+      expect(instances.length).toBe(1);
+    });
+    feedEvents(instances[0], biEvents("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("markdown").textContent).toContain("华东区销售额为 100。");
     });
 
-    // Intent thinking block renders semantic layer
     expect(container.textContent).toContain("orders");
     expect(container.textContent).toContain("sales_amount");
     expect(container.textContent).toContain("region");
     expect(container.textContent).toContain("Thinking");
 
-    // No chart marker leaks into the rendered output
     expect(container.textContent).not.toContain("<<CHART:");
   });
 
   test("renders clarification chips and sends sessionId on chip click", async () => {
     const user = userEvent.setup();
+    const { instances } = installMockEventSource();
 
-    mockFetch
-      .mockResolvedValueOnce(
-        createSSEResponse(
-          clarificationEvents("session-abc", "请选择您想分析的数据主题", [
-            { label: "订单分析", value: "订单分析", description: "订单数据" },
-            { label: "用户分析", value: "用户分析", description: "用户数据" },
-          ])
-        )
-      )
-      .mockResolvedValueOnce(
-        createSSEResponse(
-          biEvents("订单销售额为 100。", [{ 销售额: 100 }], "single_value")
-        )
-      );
-
-    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+    render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
 
     await screen.findByText("gpt-test");
 
@@ -208,40 +200,36 @@ describe("BiArea", () => {
     await user.type(input, "1");
     await user.keyboard("{Enter}");
 
-    // Clarification chips render
     await waitFor(() => {
-      expect(container.textContent).toContain("请选择您想分析的数据主题");
+      expect(instances.length).toBe(1);
     });
+    feedEvents(instances[0], clarificationEvents("session-abc", "请选择您想分析的数据主题", [
+      { label: "订单分析", value: "订单分析", description: "订单数据" },
+      { label: "用户分析", value: "用户分析", description: "用户数据" },
+    ]));
+
     const chip = await screen.findByRole("button", { name: /订单分析/ });
     expect(chip).toBeInTheDocument();
 
-    // Click chip — triggers second query with sessionId
     await user.click(chip);
 
-    // Second fetch call includes sessionId and chip value as question
     await waitFor(() => {
-      const secondCallBody = JSON.parse(mockFetch.mock.calls[1][1].body);
-      expect(secondCallBody.question).toBe("订单分析");
-      expect(secondCallBody.sessionId).toBe("session-abc");
+      expect(instances.length).toBe(2);
     });
+    // Second EventSource URL includes sessionId and chip value as question
+    expect(instances[1].url).toContain("sessionId=session-abc");
+    expect(instances[1].url).toContain("question=" + encodeURIComponent("订单分析"));
 
-    // Result renders
+    feedEvents(instances[1], biEvents("订单销售额为 100。", [{ 销售额: 100 }], "single_value"));
+
     await waitFor(() => {
-      expect(container.textContent).toContain("订单销售额为 100。");
+      expect(screen.getByTestId("markdown").textContent).toContain("订单销售额为 100。");
     });
   });
 
   test("clicking chart chip switches active chart without fetching", async () => {
     const user = userEvent.setup();
-
-    mockFetch.mockResolvedValueOnce(
-      createSSEResponse(
-        biEvents("各区销售额对比。", [
-          { region: "华东", sales_amount: 100 },
-          { region: "华北", sales_amount: 200 },
-        ], "bar")
-      )
-    );
+    const { instances } = installMockEventSource();
 
     render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
 
@@ -249,6 +237,14 @@ describe("BiArea", () => {
     const input = screen.getByPlaceholderText("Ask anything...");
     await user.type(input, "各区销售额");
     await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+    feedEvents(instances[0], biEvents("各区销售额对比。", [
+      { region: "华东", sales_amount: 100 },
+      { region: "华北", sales_amount: 200 },
+    ], "bar"));
 
     await waitFor(() => {
       expect(screen.getByTestId("chart-renderer").dataset.chartType).toBe("bar");
@@ -261,29 +257,13 @@ describe("BiArea", () => {
       expect(screen.getByTestId("chart-renderer").dataset.chartType).toBe("pie");
     });
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(instances.length).toBe(1);
   });
 
   test("falls back when LLM recommends chartType not in candidate pool", async () => {
     const user = userEvent.setup();
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    mockFetch.mockResolvedValueOnce(
-      createSSEResponse(
-        biEvents(
-          "各区域各产品线销售额。",
-          [
-            { region: "华东", product: "A", sales_amount: 100 },
-            { region: "华北", product: "A", sales_amount: 200 },
-          ],
-          "pie",
-          [
-            { name: "region", type: "STRING" },
-            { name: "product", type: "STRING" },
-          ]
-        )
-      )
-    );
+    const { instances } = installMockEventSource();
 
     render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
 
@@ -291,6 +271,22 @@ describe("BiArea", () => {
     const input = screen.getByPlaceholderText("Ask anything...");
     await user.type(input, "各区域各产品线销售额");
     await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+    feedEvents(instances[0], biEvents(
+      "各区域各产品线销售额。",
+      [
+        { region: "华东", product: "A", sales_amount: 100 },
+        { region: "华北", product: "A", sales_amount: 200 },
+      ],
+      "pie",
+      [
+        { name: "region", type: "STRING" },
+        { name: "product", type: "STRING" },
+      ]
+    ));
 
     await waitFor(() => {
       expect(screen.getByTestId("chart-renderer").dataset.chartType).toBe("grouped_bar");
@@ -305,17 +301,7 @@ describe("BiArea", () => {
 
   test("hides data table for single_value (0 dimension) scenario", async () => {
     const user = userEvent.setup();
-
-    mockFetch.mockResolvedValueOnce(
-      createSSEResponse(
-        biEvents(
-          "总销售额为 1000。",
-          [{ sales_amount: 1000 }],
-          "single_value",
-          []
-        )
-      )
-    );
+    const { instances } = installMockEventSource();
 
     const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
 
@@ -325,10 +311,38 @@ describe("BiArea", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+    feedEvents(instances[0], biEvents(
+      "总销售额为 1000。",
+      [{ sales_amount: 1000 }],
+      "single_value",
+      []
+    ));
+
+    await waitFor(() => {
       expect(screen.getByTestId("chart-renderer").dataset.chartType).toBe("single_value");
     });
 
-    // No data table rendered for single_value (KPI card already expresses the data)
     expect(container.querySelector("table")).not.toBeInTheDocument();
+  });
+
+  test("URL-encodes question in query string", async () => {
+    const user = userEvent.setup();
+    const { instances } = installMockEventSource();
+
+    render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+
+    await screen.findByText("gpt-test");
+    const input = screen.getByPlaceholderText("Ask anything...");
+    await user.type(input, "华东区销售额多少");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+    expect(instances[0].url).toContain("question=" + encodeURIComponent("华东区销售额多少"));
+    expect(instances[0].url).toContain("credentialId=1");
+    expect(instances[0].url).toContain("modelName=gpt-test");
   });
 });
