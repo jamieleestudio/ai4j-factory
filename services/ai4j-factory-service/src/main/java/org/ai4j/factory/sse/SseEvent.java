@@ -9,9 +9,10 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = IntentEvent.class, name = "intent"),
         @JsonSubTypes.Type(value = ChunkEvent.class, name = "chunk"),
         @JsonSubTypes.Type(value = ResultEvent.class, name = "result"),
+        @JsonSubTypes.Type(value = ClarificationEvent.class, name = "clarification"),
         @JsonSubTypes.Type(value = ErrorEvent.class, name = "error"),
         @JsonSubTypes.Type(value = DoneEvent.class, name = "done"),
 })
 public sealed interface SseEvent
-        permits StatusEvent, IntentEvent, ChunkEvent, ResultEvent, ErrorEvent, DoneEvent {
+        permits StatusEvent, IntentEvent, ChunkEvent, ResultEvent, ClarificationEvent, ErrorEvent, DoneEvent {
 }

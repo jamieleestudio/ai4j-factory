@@ -6,7 +6,7 @@ import java.util.Map;
 public record IntentEvent(
         String subject,
         List<String> metrics,
-        List<String> dimensions,
+        List<DimensionRef> dimensions,
         List<Map<String, Object>> filters
 ) implements SseEvent {
 }

@@ -1,13 +1,21 @@
 package org.ai4j.factory.bi;
 
+import org.ai4j.factory.bi.clarification.ClarificationStore;
+import org.ai4j.factory.bi.clarification.PendingClarification;
 import org.ai4j.factory.bi.insight.InsightGenerationService;
+import org.ai4j.factory.bi.intent.IntentExtractionResult;
 import org.ai4j.factory.bi.intent.IntentExtractionService;
 import org.ai4j.factory.bi.intent.QueryIntent;
 import org.ai4j.factory.bi.query.QueryExecutionService;
 import org.ai4j.factory.bi.query.SqlBuilder;
+import org.ai4j.factory.bi.semantic.Dimension;
+import org.ai4j.factory.bi.semantic.Metric;
 import org.ai4j.factory.bi.semantic.SemanticLayer;
 import org.ai4j.factory.bi.semantic.Subject;
 import org.ai4j.factory.sse.ChunkEvent;
+import org.ai4j.factory.sse.ClarificationEvent;
+import org.ai4j.factory.sse.ClarificationOption;
+import org.ai4j.factory.sse.DimensionRef;
 import org.ai4j.factory.sse.DoneEvent;
 import org.ai4j.factory.sse.ErrorEvent;
 import org.ai4j.factory.sse.IntentEvent;
@@ -20,9 +28,12 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/bi")
@@ -34,20 +45,23 @@ public class BiController {
     private final QueryExecutionService queryService;
     private final InsightGenerationService insightService;
     private final SemanticLayer semanticLayer;
+    private final ClarificationStore clarificationStore;
 
     public BiController(IntentExtractionService intentService,
                         QueryExecutionService queryService,
                         InsightGenerationService insightService,
-                        SemanticLayer semanticLayer) {
+                        SemanticLayer semanticLayer,
+                        ClarificationStore clarificationStore) {
         this.intentService = intentService;
         this.queryService = queryService;
         this.insightService = insightService;
         this.semanticLayer = semanticLayer;
+        this.clarificationStore = clarificationStore;
     }
 
     @PostMapping(value = "/query", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> query(@RequestBody QueryRequest request) {
-        log.info("BI query: {}", request.question());
+        log.info("BI query: {}, sessionId: {}", request.question(), request.sessionId());
 
         return Flux.create(sink -> {
             StringBuilder fullText = new StringBuilder();
@@ -56,14 +70,36 @@ public class BiController {
             try {
                 sink.next(SseEventSerializer.toJson(new StatusEvent("analyzing", "正在分析你的问题...")));
 
-                QueryIntent intent = intentService.extract(request.question(), request.credentialId(), request.modelName());
+                PendingClarification context = null;
+                if (request.sessionId() != null) {
+                    context = clarificationStore.get(request.sessionId()).orElse(null);
+                    if (context == null) {
+                        log.info("SessionId {} not found, falling back to fresh query", request.sessionId());
+                    }
+                }
+
+                IntentExtractionResult result = context != null
+                        ? intentService.extractWithContext(request.question(), context,
+                                request.credentialId(), request.modelName())
+                        : intentService.extract(request.question(),
+                                request.credentialId(), request.modelName());
+
+                if (result instanceof IntentExtractionResult.NeedsClarification nc) {
+                    handleClarification(sink, nc, request, context);
+                    return;
+                }
+
+                IntentExtractionResult.Ready ready = (IntentExtractionResult.Ready) result;
+                QueryIntent intent = toQueryIntent(ready);
                 log.info("Extracted intent: subject={}, metrics={}, dimensions={}, filters={}",
                         intent.getSubject(), intent.getMetrics(), intent.getDimensions(), intent.getFilters());
-                sink.next(SseEventSerializer.toJson(toIntentEvent(intent)));
+
+                Subject subject = semanticLayer.getSubject(intent.getSubject());
+
+                sink.next(SseEventSerializer.toJson(toIntentEvent(intent, subject)));
 
                 sink.next(SseEventSerializer.toJson(new StatusEvent("querying", "正在查询数据库...")));
 
-                Subject subject = semanticLayer.getSubject(intent.getSubject());
                 SqlBuilder.SqlResult sqlResult = new SqlBuilder().build(intent, subject);
                 List<Map<String, Object>> data = queryService.execute(sqlResult);
 
@@ -104,7 +140,79 @@ public class BiController {
         });
     }
 
-    private IntentEvent toIntentEvent(QueryIntent intent) {
+    private void handleClarification(reactor.core.publisher.FluxSink<String> sink,
+                                      IntentExtractionResult.NeedsClarification nc,
+                                      QueryRequest request,
+                                      PendingClarification context) {
+        List<ClarificationOption> options = buildClarificationOptions(nc);
+
+        String sessionId;
+        String originalQuestion;
+        if (context != null) {
+            sessionId = request.sessionId();
+            originalQuestion = context.originalQuestion();
+        } else {
+            sessionId = UUID.randomUUID().toString();
+            originalQuestion = request.question();
+        }
+
+        PendingClarification pending = new PendingClarification(
+                originalQuestion, nc.reason(), options, nc.subject(), Instant.now()
+        );
+        clarificationStore.put(sessionId, pending);
+
+        sink.next(SseEventSerializer.toJson(new ClarificationEvent(sessionId, nc.message(), options)));
+        sink.next(SseEventSerializer.toJson(new DoneEvent()));
+        sink.complete();
+    }
+
+    private List<ClarificationOption> buildClarificationOptions(IntentExtractionResult.NeedsClarification nc) {
+        List<ClarificationOption> options = new ArrayList<>();
+        switch (nc.reason()) {
+            case "question_unclear" -> {
+                for (Subject subject : semanticLayer.getAllSubjects()) {
+                    options.add(new ClarificationOption(
+                            subject.getName(), subject.getName(), subject.getDescription()));
+                }
+            }
+            case "subject_ambiguous" -> {
+                String metricName = nc.metric();
+                for (Subject subject : semanticLayer.getAllSubjects()) {
+                    boolean hasMetric = subject.getMetrics().stream()
+                            .anyMatch(m -> m.getName().equals(metricName));
+                    if (hasMetric) {
+                        options.add(new ClarificationOption(
+                                subject.getName(), subject.getName(), subject.getDescription()));
+                    }
+                }
+            }
+            case "metric_unspecified" -> {
+                Subject subject = semanticLayer.getSubject(nc.subject());
+                for (Metric metric : subject.getMetrics()) {
+                    options.add(new ClarificationOption(
+                            metric.getName(), metric.getName(), metric.getDescription()));
+                }
+            }
+            default -> {
+                for (Subject subject : semanticLayer.getAllSubjects()) {
+                    options.add(new ClarificationOption(
+                            subject.getName(), subject.getName(), subject.getDescription()));
+                }
+            }
+        }
+        return options;
+    }
+
+    private QueryIntent toQueryIntent(IntentExtractionResult.Ready ready) {
+        QueryIntent intent = new QueryIntent();
+        intent.setSubject(ready.subject());
+        intent.setMetrics(new ArrayList<>(ready.metrics()));
+        intent.setDimensions(new ArrayList<>(ready.dimensions()));
+        intent.setFilters(new ArrayList<>(ready.filters()));
+        return intent;
+    }
+
+    private IntentEvent toIntentEvent(QueryIntent intent, Subject subject) {
         List<Map<String, Object>> filters = intent.getFilters().stream()
                 .map(f -> {
                     Map<String, Object> m = new LinkedHashMap<>();
@@ -114,8 +222,17 @@ public class BiController {
                     return m;
                 })
                 .toList();
-        return new IntentEvent(intent.getSubject(), intent.getMetrics(), intent.getDimensions(), filters);
+        List<DimensionRef> dimensions = intent.getDimensions().stream()
+                .map(name -> {
+                    Dimension dim = subject.getDimensions().stream()
+                            .filter(d -> d.getName().equals(name))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalArgumentException("Dimension not found: " + name));
+                    return new DimensionRef(name, dim.getType().name());
+                })
+                .toList();
+        return new IntentEvent(intent.getSubject(), intent.getMetrics(), dimensions, filters);
     }
 
-    public record QueryRequest(String question, Long credentialId, String modelName) {}
+    public record QueryRequest(String question, Long credentialId, String modelName, String sessionId) {}
 }

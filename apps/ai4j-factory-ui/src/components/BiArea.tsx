@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PanelLeft, BarChart3, Loader2, Brain } from "lucide-react";
+import { PanelLeft, BarChart3, Loader2, Brain, ChevronRight } from "lucide-react";
 import ChatInput from "./ChatInput";
+import ChartRenderer from "./ChartRenderer";
+import ChartSwitcher from "./ChartSwitcher";
 import { credentialService } from "../services/credentialService";
 import { SelectableModelOption } from "../types/credential";
 import { buildSelectableModelOptions } from "../utils/modelOptions";
-import { fetchSSE, IntentPayload } from "../utils/fetchSSE";
+import { fetchSSE, IntentPayload, ClarificationOption } from "../utils/fetchSSE";
+import { inferChartPool } from "../lib/chartPool";
+import { isChartType, type ChartType } from "../lib/chartTypes";
 
 interface BiAreaProps {
   isSidebarOpen: boolean;
@@ -25,11 +29,13 @@ type BiMessage =
   | {
       id: string;
       role: "assistant";
-      status: "loading" | "streaming" | "success" | "error";
+      status: "loading" | "streaming" | "clarification" | "success" | "error";
       progressText?: string;
       intent?: IntentPayload;
       streamingText?: string;
       result?: InsightResult;
+      activeChart?: ChartType;
+      clarification?: { sessionId: string; message: string; options: ClarificationOption[] };
       error?: string;
     };
 
@@ -61,7 +67,9 @@ function ThinkingBlock({ intent, progressText }: { intent?: IntentPayload; progr
           {intent.dimensions.length > 0 && (
             <div>
               <span className="text-gray-400">Dimensions: </span>
-              <span className="font-medium text-foreground">{intent.dimensions.join(", ")}</span>
+              <span className="font-medium text-foreground">
+                {intent.dimensions.map((d) => d.name).join(", ")}
+              </span>
             </div>
           )}
           {intent.filters.length > 0 && (
@@ -78,12 +86,44 @@ function ThinkingBlock({ intent, progressText }: { intent?: IntentPayload; progr
   );
 }
 
+function ClarificationBlock({
+  message,
+  options,
+  onSelect,
+}: {
+  message: string;
+  options: ClarificationOption[];
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+      <div className="text-sm text-foreground mb-3">{message}</div>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onSelect(opt.value)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full hover:border-foreground hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-foreground"
+          >
+            <span className="font-medium">{opt.label}</span>
+            {opt.description && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">— {opt.description}</span>
+            )}
+            <ChevronRight size={14} className="text-gray-400" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
   const [messages, setMessages] = useState<BiMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [modelOptions, setModelOptions] = useState<SelectableModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<SelectableModelOption | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const pendingSessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (bottomRef.current) {
@@ -110,7 +150,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
     loadCredentials();
   }, []);
 
-  const handleQuery = async (content: string) => {
+  const handleQuery = async (content: string, sessionId?: string) => {
     if (isLoading) return;
 
     if (!selectedModel) {
@@ -139,6 +179,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
       question: content,
       credentialId: selectedModel.credentialId,
       modelName: selectedModel.modelName,
+      sessionId: sessionId ?? pendingSessionIdRef.current,
     }, {
       onStatus: (_stage, message) => {
         setMessages((prev) =>
@@ -167,17 +208,45 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
         );
       },
       onResult: (result) => {
+        pendingSessionIdRef.current = null;
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id !== assistantMsgId || msg.role !== "assistant") return msg;
+            const pool = msg.intent ? inferChartPool(msg.intent) : [];
+            const recommended = isChartType(result.chartType) ? result.chartType : null;
+            const valid = recommended && pool.includes(recommended) ? recommended : null;
+            const fallback = pool[0];
+            if (recommended && !valid) {
+              console.warn(
+                `LLM recommended chartType "${recommended}" not in candidate pool [${pool.join(", ")}], falling back to "${fallback ?? "none"}"`
+              );
+            }
+            return {
+              ...msg,
+              status: "success" as const,
+              activeChart: (valid ?? fallback) as ChartType | undefined,
+              result: {
+                question: content,
+                summary: fullText,
+                data: result.data,
+                chartType: result.chartType,
+              },
+            };
+          })
+        );
+      },
+      onClarification: (clarification) => {
+        pendingSessionIdRef.current = clarification.sessionId;
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
               ? {
                   ...msg,
-                  status: "success" as const,
-                  result: {
-                    question: content,
-                    summary: fullText,
-                    data: result.data,
-                    chartType: result.chartType,
+                  status: "clarification" as const,
+                  clarification: {
+                    sessionId: clarification.sessionId,
+                    message: clarification.message,
+                    options: clarification.options,
                   },
                 }
               : msg
@@ -185,6 +254,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
         );
       },
       onError: (error) => {
+        pendingSessionIdRef.current = null;
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
@@ -197,6 +267,10 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
         setIsLoading(false);
       },
     });
+  };
+
+  const handleChipSelect = (assistantMsgId: string, value: string) => {
+    handleQuery(value);
   };
 
   return (
@@ -258,6 +332,19 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
                 );
               }
 
+              if (msg.status === "clarification" && msg.clarification) {
+                return (
+                  <div key={msg.id} className="space-y-3">
+                    <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
+                    <ClarificationBlock
+                      message={msg.clarification.message}
+                      options={msg.clarification.options}
+                      onSelect={(value) => handleChipSelect(msg.id, value)}
+                    />
+                  </div>
+                );
+              }
+
               if (msg.status === "streaming") {
                 return (
                   <div key={msg.id} className="space-y-3">
@@ -286,6 +373,8 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
 
               if (msg.status === "success" && msg.result) {
                 const result = msg.result;
+                const pool = msg.intent ? inferChartPool(msg.intent) : [];
+                const showChart = pool.length > 0 && msg.activeChart !== undefined && msg.intent;
                 return (
                   <div key={msg.id} className="space-y-3">
                     <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
@@ -293,12 +382,39 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Insight</div>
                       <div className="text-foreground whitespace-pre-wrap">{result.summary}</div>
-                      {result.chartType && result.chartType !== "single_value" && (
-                        <div className="mt-2 text-xs text-gray-500">
-                          Recommended chart: <span className="font-medium">{result.chartType}</span>
-                        </div>
-                      )}
                     </div>
+
+                    {/* Chart Area */}
+                    {showChart && msg.intent && (
+                      <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <ChartRenderer
+                          chartType={msg.activeChart!}
+                          data={result.data}
+                          intent={msg.intent}
+                        />
+                        {pool.length > 1 && (
+                          <ChartSwitcher
+                            candidateCharts={pool}
+                            activeChart={msg.activeChart!}
+                            onChange={(type) =>
+                              setMessages((prev) =>
+                                prev.map((m) =>
+                                  m.id === msg.id && m.role === "assistant"
+                                    ? { ...m, activeChart: type }
+                                    : m
+                                )
+                              )
+                            }
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    {!showChart && pool.length === 0 && (
+                      <div className="p-4 text-center text-sm text-gray-500 rounded-lg border border-gray-200 dark:border-gray-700">
+                        维度过多，暂不支持自动可视化
+                      </div>
+                    )}
 
                     {/* Data Table */}
                     {result.data && result.data.length > 0 && (

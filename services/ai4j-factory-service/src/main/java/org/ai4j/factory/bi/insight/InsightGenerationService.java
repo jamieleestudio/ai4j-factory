@@ -113,11 +113,21 @@ public class InsightGenerationService {
                 1. 用自然语言总结数据，突出关键发现
                 2. 推荐一个最适合的图表类型
 
-                ## 图表类型
-                - single_value: 单个数值
-                - bar: 柱状图（分类对比）
-                - line: 折线图（时间序列）
-                - pie: 饼图（占比）
+                ## 图表类型（按数据形状选择）
+                - single_value: 单个数值。适用：结果仅 1 行 1 列（无维度，仅 1 个指标）
+                - bar: 柱状图。适用：1 个分类维度 + 1 个指标，用于分类对比
+                - pie: 饼图。适用：1 个分类维度 + 1 个指标，用于展示占比。仅在维度数 = 1 时使用
+                - line: 折线图。适用：1 个时间维度 + 1 个指标，用于趋势
+                - grouped_bar: 分组柱状图。适用：2 个维度 + 1 个指标，用于并列对比
+                - stacked_bar: 堆叠柱状图。适用：2 个维度 + 1 个指标，用于堆叠占比
+                - heatmap: 热力图。适用：2 个维度 + 1 个指标，用于密度分布
+                - line_multi: 多线折线图。适用：1 个时间维度 + 1 个分组维度 + 1 个指标，用于多序列趋势
+
+                ## 选择约束
+                - 维度数 = 0：single_value
+                - 维度数 = 1：按维度是否为时间序列选择 line，否则 bar 或 pie
+                - 维度数 = 2：grouped_bar / stacked_bar / heatmap（含时间维度时优先 line_multi）
+                - 维度数 ≥ 2 时不要选 pie
                 """.formatted(question, dataStr.toString());
     }
 

@@ -22,13 +22,13 @@ describe("parseSSELine", () => {
 
   test("parses intent event", () => {
     const result = parseSSELine(
-      'data: {"type":"intent","subject":"orders","metrics":["sales_amount"],"dimensions":["region"],"filters":[{"dimension":"region","operator":"=","value":"华东"}]}'
+      'data: {"type":"intent","subject":"orders","metrics":["sales_amount"],"dimensions":[{"name":"region","type":"STRING"}],"filters":[{"dimension":"region","operator":"=","value":"华东"}]}'
     );
     expect(result).toEqual({
       type: "intent",
       subject: "orders",
       metrics: ["sales_amount"],
-      dimensions: ["region"],
+      dimensions: [{ name: "region", type: "STRING" }],
       filters: [{ dimension: "region", operator: "=", value: "华东" }],
     });
   });
@@ -58,6 +58,18 @@ describe("parseSSELine", () => {
   test("parses done event", () => {
     const result = parseSSELine('data: {"type":"done"}');
     expect(result).toEqual({ type: "done" });
+  });
+
+  test("parses clarification event", () => {
+    const result = parseSSELine(
+      'data: {"type":"clarification","sessionId":"abc-123","message":"请选择主题","options":[{"label":"订单分析","value":"订单分析","description":"订单数据"}]}'
+    );
+    expect(result).toEqual({
+      type: "clarification",
+      sessionId: "abc-123",
+      message: "请选择主题",
+      options: [{ label: "订单分析", value: "订单分析", description: "订单数据" }],
+    });
   });
 
   test("returns null for non-data lines", () => {

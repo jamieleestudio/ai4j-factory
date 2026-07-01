@@ -1,3 +1,8 @@
+export type IntentDimension = {
+  name: string;
+  type: string;
+};
+
 export type IntentFilter = {
   dimension: string;
   operator: string;
@@ -7,7 +12,7 @@ export type IntentFilter = {
 export type IntentPayload = {
   subject: string;
   metrics: string[];
-  dimensions: string[];
+  dimensions: IntentDimension[];
   filters: IntentFilter[];
 };
 
@@ -17,11 +22,24 @@ export type ResultPayload = {
   rowCount: number;
 };
 
+export type ClarificationOption = {
+  label: string;
+  value: string;
+  description?: string;
+};
+
+export type ClarificationPayload = {
+  sessionId: string;
+  message: string;
+  options: ClarificationOption[];
+};
+
 export type SseEvent =
   | { type: "status"; stage: string; message: string }
-  | { type: "intent"; subject: string; metrics: string[]; dimensions: string[]; filters: IntentFilter[] }
+  | { type: "intent"; subject: string; metrics: string[]; dimensions: IntentDimension[]; filters: IntentFilter[] }
   | { type: "chunk"; content: string }
   | { type: "result"; chartType: string; data: Record<string, unknown>[]; rowCount: number }
+  | { type: "clarification"; sessionId: string; message: string; options: ClarificationOption[] }
   | { type: "error"; message: string }
   | { type: "done" };
 
@@ -30,6 +48,7 @@ export interface SSECallbacks {
   onIntent?: (intent: IntentPayload) => void;
   onChunk?: (content: string) => void;
   onResult?: (result: ResultPayload) => void;
+  onClarification?: (clarification: ClarificationPayload) => void;
   onError?: (message: string) => void;
   onDone?: () => void;
 }
@@ -75,6 +94,13 @@ function dispatch(event: SseEvent, callbacks: SSECallbacks): void {
         chartType: event.chartType,
         data: event.data,
         rowCount: event.rowCount,
+      });
+      break;
+    case "clarification":
+      callbacks.onClarification?.({
+        sessionId: event.sessionId,
+        message: event.message,
+        options: event.options,
       });
       break;
     case "error":
