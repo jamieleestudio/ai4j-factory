@@ -161,6 +161,29 @@ function EChart({ option }: { option: EChartsOption }) {
 
 **Why:** 纯函数 + 快照测试是最易测的组合——给定 fixture 数据（Case A/B/C）和 chartType，断言输出 option JSON 完全确定。ECharts 渲染本身不需要测（库已测），只测 option 构造逻辑。
 
+### Decision 9: BI 渲染态视觉容器最小化
+
+Insight 文本（streaming 阶段逐字追加 + success 阶段最终展示）改为纯文字，移除蓝框、"Insight" 小标签、闪烁光标。视觉容器仅保留三处：
+
+```
+┌─ Thinking Block ──┐  保留框（思考过程独立视觉块）
+├─ Chart Area ──────┤  保留框（图表 + chips 切换）
+└─ Data Table ──────┘  保留框 + max-h-80（~10 行）+ overflow-y-auto
+```
+
+Data Table 显示规则：
+- `single_value`（0 dim）场景 → 不渲染 Data Table（KPI 卡已完整表达，表格冗余）
+- 其他 chartType → 渲染 Data Table（限高 + 滚动，作为"原始数据兜底"读值）
+- 候选池为空（3+ dim / 2+ metric）→ 渲染 Data Table（无图表时的兜底，同样应用 max-h-80）
+
+**Alternatives considered:**
+- 保留 Insight 蓝框但去掉标签：视觉容器过多，与 chat 体验（ChatGPT / Claude.ai）的纯文字回答不一致
+- 表格按行数 slice 10 行 + "展开更多"按钮：引入额外交互，简单场景过度设计
+- `single_value` 也显示表格：1 行 1 列的表格纯冗余，KPI 卡已表达
+- 表格彻底隐藏（仅图表时）：丢失"精确读值"能力，大表场景用户无法看原始行
+
+**Why:** streaming 阶段文字逐字追加本身就是反馈信号（参照 Claude.ai / ChatGPT），蓝框 + 光标是多余视觉噪音；表格作为"原始数据兜底"既要保留精确读值能力又要限制视觉占用，`max-h-80` + 滚动平衡两者；`single_value` 的 KPI 卡与表格是 1:1 信息重复，去掉表格无信息损失。
+
 ## Risks / Trade-offs
 
 - **[BREAKING: IntentEvent.dimensions 结构变更]** 旧前端不解析 `type` 字段会崩 → 内部项目前后端同步发布，无版本协商；前端 `IntentPayload` 类型同步改、`ThinkingBlock` 渲染改 `dim.name`、测试 fixture 同步更新

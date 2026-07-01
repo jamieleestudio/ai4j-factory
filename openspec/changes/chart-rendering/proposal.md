@@ -11,6 +11,7 @@ BI 查询返回的 `result` 事件已包含 `chartType` 和 `data`，但前端 `
 - **图表切换为纯前端 state，不持久化**：用户点 chip 切换图表时只更新本地 `activeChart` 字段，不触发网络请求、不写 sessionStorage；重新提问 / 刷新页面回到 LLM 推荐
 - **V1 范围限定为单指标**（`nmetric=1`）+ 0/1/2 维度：3+ 维度或 2+ 指标时候选池为空，前端退化到只显示表格 + 提示"维度过多，暂不支持自动可视化"
 - **多维度场景禁止 pie**：`ndim=2` 候选池为 `[grouped_bar, stacked_bar, heatmap]`，不允许降维到饼图（避免前端按 dim[0] 聚合 dim[1] 产生误导）
+- **BI 渲染态视觉容器最小化**：Insight 文本（streaming + success）改为纯文字无边框、无 "Insight" 小标签、无闪烁光标；Data Table 限高 `max-h-80`（约 10 行）+ 内部滚动；`single_value` 场景不渲染 Data Table（KPI 卡已表达，表格冗余）
 
 ## Capabilities
 

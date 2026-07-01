@@ -5,6 +5,7 @@ import { PanelLeft, BarChart3, Loader2, Brain, ChevronRight } from "lucide-react
 import ChatInput from "./ChatInput";
 import ChartRenderer from "./ChartRenderer";
 import ChartSwitcher from "./ChartSwitcher";
+import Markdown from "./Markdown";
 import { credentialService } from "../services/credentialService";
 import { SelectableModelOption } from "../types/credential";
 import { buildSelectableModelOptions } from "../utils/modelOptions";
@@ -124,8 +125,13 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
   const [selectedModel, setSelectedModel] = useState<SelectableModelOption | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pendingSessionIdRef = useRef<string | null>(null);
+  const suppressScrollRef = useRef(false);
 
   useEffect(() => {
+    if (suppressScrollRef.current) {
+      suppressScrollRef.current = false;
+      return;
+    }
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
@@ -349,12 +355,8 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
                 return (
                   <div key={msg.id} className="space-y-3">
                     <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Insight</div>
-                      <div className="text-foreground whitespace-pre-wrap">
-                        {msg.streamingText}
-                        <span className="inline-block w-1.5 h-4 bg-gray-500 animate-pulse ml-0.5 align-middle" />
-                      </div>
+                    <div className="text-foreground leading-7">
+                      <Markdown content={msg.streamingText ?? ""} />
                     </div>
                   </div>
                 );
@@ -379,9 +381,8 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
                   <div key={msg.id} className="space-y-3">
                     <ThinkingBlock intent={msg.intent} progressText={msg.progressText} />
                     {/* Summary */}
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Insight</div>
-                      <div className="text-foreground whitespace-pre-wrap">{result.summary}</div>
+                    <div className="text-foreground leading-7">
+                      <Markdown content={result.summary} />
                     </div>
 
                     {/* Chart Area */}
@@ -396,15 +397,16 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
                           <ChartSwitcher
                             candidateCharts={pool}
                             activeChart={msg.activeChart!}
-                            onChange={(type) =>
+                            onChange={(type) => {
+                              suppressScrollRef.current = true;
                               setMessages((prev) =>
                                 prev.map((m) =>
                                   m.id === msg.id && m.role === "assistant"
                                     ? { ...m, activeChart: type }
                                     : m
                                 )
-                              )
-                            }
+                              );
+                            }}
                           />
                         )}
                       </div>
@@ -417,11 +419,11 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
                     )}
 
                     {/* Data Table */}
-                    {result.data && result.data.length > 0 && (
-                      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                    {result.data && result.data.length > 0 && msg.activeChart !== "single_value" && (
+                      <div className="overflow-x-auto overflow-y-auto max-h-80 rounded-lg border border-gray-200 dark:border-gray-700">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="bg-gray-50 dark:bg-gray-800">
+                            <tr className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                               {Object.keys(result.data[0]).map((key) => (
                                 <th key={key} className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
                                   {key}

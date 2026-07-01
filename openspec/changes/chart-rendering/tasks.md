@@ -85,3 +85,13 @@
 - [ ] 10.10 E2E：2 dim 含时间 "各区域按月销售额" → 验证渲染 line_multi — 需手动验证
 - [ ] 10.11 E2E：0 dim 场景 "总销售额" → 验证渲染 KPI 卡片 — 需手动验证
 - [ ] 10.12 E2E：3+ dim 场景 "各区域各产品线各签单人销售额" → 验证退化到表格 + 提示文案 — 需手动验证
+
+## 11. 前端：BI 渲染态视觉容器最小化
+
+- [x] 11.1 移除 `BiArea.tsx` streaming 态 Insight 蓝框 + "Insight" 小标签 + 闪烁光标（line 352-358），改为纯文字逐字追加
+- [x] 11.2 移除 `BiArea.tsx` success 态 Insight 蓝框 + "Insight" 小标签（line 382-385），改为纯文字段落
+- [x] 11.3 `BiArea.tsx` Data Table 容器加 `max-h-80 overflow-y-auto`（约 10 行预览，超出滚动）+ 表头 `sticky top-0`
+- [x] 11.4 `BiArea.tsx` 在 `activeChart === 'single_value'` 场景下不渲染 Data Table（KPI 卡已表达）
+- [x] 11.5 更新 `BiArea.test.tsx`：原 5 个测试无 Insight 蓝框断言无需改动；新增 `hides data table for single_value (0 dimension) scenario` 测试覆盖 11.4 — 6 个测试全部通过
+- [x] 11.6 抽取共享 `Markdown.tsx` 组件（含 GFM + 代码高亮 + 自定义元素样式），`BiArea.tsx` streaming + success 态 Insight 改用 `<Markdown>` 渲染；`MessageList.tsx` 同步改用新组件去重；测试 mock 掉 `Markdown` 隔离 `react-syntax-highlighter` 的 CJS/ESM 互操作问题 — 6 个测试通过，build 通过
+- [ ] 11.7 手动验证：streaming 阶段文字逐字追加无容器；success 阶段 Insight 纯文字 + markdown 解析；表格超 10 行可滚动；`single_value` 无表格；切换图表不触发滚动

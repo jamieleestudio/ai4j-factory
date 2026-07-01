@@ -13,6 +13,10 @@ vi.mock("./ChartRenderer", () => ({
   ),
 }));
 
+vi.mock("./Markdown", () => ({
+  default: ({ content }: { content: string }) => <div data-testid="markdown">{content}</div>,
+}));
+
 vi.mock("../services/credentialService", () => ({
   credentialService: {
     getCredentials: vi.fn().mockResolvedValue([
@@ -297,5 +301,34 @@ describe("BiArea", () => {
     );
 
     warnSpy.mockRestore();
+  });
+
+  test("hides data table for single_value (0 dimension) scenario", async () => {
+    const user = userEvent.setup();
+
+    mockFetch.mockResolvedValueOnce(
+      createSSEResponse(
+        biEvents(
+          "总销售额为 1000。",
+          [{ sales_amount: 1000 }],
+          "single_value",
+          []
+        )
+      )
+    );
+
+    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+
+    await screen.findByText("gpt-test");
+    const input = screen.getByPlaceholderText("Ask anything...");
+    await user.type(input, "总销售额");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chart-renderer").dataset.chartType).toBe("single_value");
+    });
+
+    // No data table rendered for single_value (KPI card already expresses the data)
+    expect(container.querySelector("table")).not.toBeInTheDocument();
   });
 });

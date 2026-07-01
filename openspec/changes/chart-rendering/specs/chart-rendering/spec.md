@@ -118,3 +118,33 @@
 #### Scenario: SSR 安全
 - **WHEN** Next.js 进行服务端渲染
 - **THEN** `EChart.tsx` 标注 `'use client'` 指令，所有 `echarts.init` / DOM 访问在 `useEffect` 内执行，不在模块顶层或 render 阶段访问 `window` / `document`
+
+### Requirement: BI 渲染态视觉容器最小化
+前端 SHALL 仅在 Thinking Block、Chart Area、Data Table 三处使用视觉容器（边框 + 背景）。Insight 文本（streaming 阶段逐字追加 + success 阶段最终展示）SHALL 以纯文字形式渲染，无边框、无 "Insight" 小标签、无闪烁光标。
+
+#### Scenario: streaming 阶段 Insight 纯文字追加
+- **WHEN** 后端通过 `chunk` 事件流式输出 Insight 文本
+- **THEN** 前端逐字追加文字到当前 assistant 消息的 `streamingText` 字段，渲染为纯文字段落，无边框容器、无 "Insight" 小标签、无闪烁光标
+
+#### Scenario: success 阶段 Insight 纯文字展示
+- **WHEN** 后端 `done` 事件结束流式输出，前端将 `streamingText` 提升为 `result.summary`
+- **THEN** 前端将 `result.summary` 渲染为纯文字段落，无边框容器、无 "Insight" 小标签
+
+### Requirement: Data Table 高度限制与显示规则
+前端 SHALL 对 Data Table 容器应用 `max-h-80`（约 10 行预览高度）+ `overflow-y-auto`，超出部分通过内部滚动查看。`single_value` 场景（0 维度 1 指标）SHALL 不渲染 Data Table。
+
+#### Scenario: Data Table 高度限制
+- **WHEN** `result.data` 行数超过 10 行
+- **THEN** Data Table 容器渲染为 `max-h-80 overflow-y-auto`，前约 10 行可见，后续行通过容器内部滚动查看
+
+#### Scenario: single_value 场景不渲染表格
+- **WHEN** `activeChart` 为 `single_value`（候选池为 `["single_value"]`，即 0 维度 1 指标场景）
+- **THEN** 前端仅渲染 KPI 卡片，不渲染 Data Table（KPI 卡已完整表达数据，表格冗余）
+
+#### Scenario: 其他 chartType 渲染表格
+- **WHEN** `activeChart` 为 `bar` / `pie` / `line` / `grouped_bar` / `stacked_bar` / `heatmap` / `line_multi` 之一，且 `result.data` 非空
+- **THEN** 前端渲染 Chart Area + Data Table（限高 + 滚动）
+
+#### Scenario: 候选池为空时渲染表格
+- **WHEN** 候选池为空数组（3+ 维度或 2+ 指标场景），且 `result.data` 非空
+- **THEN** 前端不渲染 Chart Area，仅渲染 Data Table（限高 + 滚动）+ "维度过多，暂不支持自动可视化" 提示
