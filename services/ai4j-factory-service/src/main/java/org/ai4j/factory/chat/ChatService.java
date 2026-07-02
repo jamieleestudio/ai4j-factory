@@ -4,6 +4,7 @@ import org.ai4j.factory.sse.ChunkEvent;
 import org.ai4j.factory.sse.DoneEvent;
 import org.ai4j.factory.sse.ErrorEvent;
 import org.ai4j.factory.sse.SseEventSerializer;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -16,13 +17,13 @@ public class ChatService {
         this.chatClientFactory = chatClientFactory;
     }
 
-    public Flux<String> streamChat(Long credentialId, String message, String modelName) {
+    public Flux<ServerSentEvent<String>> streamChat(Long credentialId, String message, String modelName, String sessionId) {
         var chatClient = chatClientFactory.create(credentialId, modelName);
         return chatClient.prompt().user(message).stream().content()
-                .map(token -> SseEventSerializer.toJson(new ChunkEvent(token)))
-                .concatWith(Flux.just(SseEventSerializer.toJson(new DoneEvent())))
+                .map(token -> SseEventSerializer.toServerSentEvent(new ChunkEvent(token)))
+                .concatWith(Flux.just(SseEventSerializer.toServerSentEvent(new DoneEvent())))
                 .onErrorResume(e -> Flux.just(
-                        SseEventSerializer.toJson(new ErrorEvent(e.getMessage())),
-                        SseEventSerializer.toJson(new DoneEvent())));
+                        SseEventSerializer.toServerSentEvent(new ErrorEvent(e.getMessage())),
+                        SseEventSerializer.toServerSentEvent(new DoneEvent())));
     }
 }

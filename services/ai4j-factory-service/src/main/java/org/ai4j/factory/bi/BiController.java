@@ -24,9 +24,13 @@ import org.ai4j.factory.sse.SseEventSerializer;
 import org.ai4j.factory.sse.StatusEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -34,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/bi")
@@ -60,96 +65,118 @@ public class BiController {
     }
 
     @GetMapping(value = "/query", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> query(@RequestParam String question,
-                              @RequestParam Long credentialId,
-                              @RequestParam(required = false) String modelName,
-                              @RequestParam(required = false) String sessionId) {
+    public ResponseEntity<Flux<ServerSentEvent<String>>> query(@RequestParam String question,
+                                                               @RequestParam Long credentialId,
+                                                               @RequestParam(required = false) String modelName,
+                                                               @RequestParam(required = false) String sessionId) {
         log.info("BI query: {}, sessionId: {}", question, sessionId);
 
-        return Flux.create(sink -> {
-            StringBuilder fullText = new StringBuilder();
-            int[] lastEmitted = {0};
-
-            try {
-                sink.next(SseEventSerializer.toJson(new StatusEvent("analyzing", "正在分析你的问题...")));
-
-                PendingClarification context = null;
-                if (sessionId != null) {
-                    context = clarificationStore.get(sessionId).orElse(null);
-                    if (context == null) {
-                        log.info("SessionId {} not found, falling back to fresh query", sessionId);
-                    }
-                }
-
-                IntentExtractionResult result = context != null
-                        ? intentService.extractWithContext(question, context,
-                                credentialId, modelName)
-                        : intentService.extract(question,
-                                credentialId, modelName);
-
-                if (result instanceof IntentExtractionResult.NeedsClarification nc) {
-                    handleClarification(sink, nc, question, sessionId, credentialId, modelName, context);
-                    return;
-                }
-
-                IntentExtractionResult.Ready ready = (IntentExtractionResult.Ready) result;
-                QueryIntent intent = toQueryIntent(ready);
-                log.info("Extracted intent: subject={}, metrics={}, dimensions={}, filters={}",
-                        intent.getSubject(), intent.getMetrics(), intent.getDimensions(), intent.getFilters());
-
-                Subject subject = semanticLayer.getSubject(intent.getSubject());
-
-                sink.next(SseEventSerializer.toJson(toIntentEvent(intent, subject)));
-
-                sink.next(SseEventSerializer.toJson(new StatusEvent("querying", "正在查询数据库...")));
-
-                SqlBuilder.SqlResult sqlResult = new SqlBuilder().build(intent, subject);
-                List<Map<String, Object>> data = queryService.execute(sqlResult);
-
-                sink.next(SseEventSerializer.toJson(new StatusEvent("insight",
-                        "查询到 " + data.size() + " 条记录，正在生成洞察...")));
-
-                insightService.generateStream(question, data, credentialId, modelName)
-                        .doOnNext(chunk -> {
-                            fullText.append(chunk);
-                            int safeLen = insightService.safeDisplayLength(fullText.toString());
-                            if (safeLen > lastEmitted[0]) {
-                                String delta = fullText.substring(lastEmitted[0], safeLen);
-                                sink.next(SseEventSerializer.toJson(new ChunkEvent(delta)));
-                                lastEmitted[0] = safeLen;
+        Flux<ServerSentEvent<String>> body = Flux.concat(
+                        Flux.just(sse(new StatusEvent("analyzing", "正在分析你的问题..."))),
+                        Mono.fromCallable(() -> {
+                            PendingClarification context = null;
+                            if (sessionId != null) {
+                                context = clarificationStore.get(sessionId).orElse(null);
+                                if (context == null) {
+                                    log.info("SessionId {} not found, falling back to fresh query", sessionId);
+                                }
                             }
-                        })
-                        .doOnComplete(() -> {
-                            int safeLen = insightService.safeDisplayLength(fullText.toString());
-                            if (safeLen > lastEmitted[0]) {
-                                sink.next(SseEventSerializer.toJson(
-                                        new ChunkEvent(fullText.substring(lastEmitted[0], safeLen))));
-                                lastEmitted[0] = safeLen;
-                            }
-                            String chartType = insightService.extractChartType(fullText.toString());
-                            sink.next(SseEventSerializer.toJson(new ResultEvent(chartType, data, data.size())));
-                            sink.next(SseEventSerializer.toJson(new DoneEvent()));
-                            sink.complete();
-                        })
-                        .doOnError(sink::error)
-                        .subscribe();
 
-            } catch (Exception e) {
-                log.error("BI query failed", e);
-                sink.next(SseEventSerializer.toJson(new ErrorEvent(e.getMessage())));
-                sink.next(SseEventSerializer.toJson(new DoneEvent()));
-                sink.complete();
-            }
-        });
+                            IntentExtractionResult result = context != null
+                                    ? intentService.extractWithContext(question, context, credentialId, modelName)
+                                    : intentService.extract(question, credentialId, modelName);
+
+                            return new Object[]{result, context};
+                        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                        .flatMapMany(arr -> {
+                            IntentExtractionResult result = (IntentExtractionResult) arr[0];
+                            PendingClarification context = (PendingClarification) arr[1];
+
+                            if (result instanceof IntentExtractionResult.NeedsClarification nc) {
+                                return Flux.just(
+                                        sse(handleClarificationEvent(nc, question, sessionId, context)),
+                                        sse(new DoneEvent())
+                                );
+                            }
+
+                            IntentExtractionResult.Ready ready = (IntentExtractionResult.Ready) result;
+                            QueryIntent intent = toQueryIntent(ready);
+                            log.info("Extracted intent: subject={}, metrics={}, dimensions={}, filters={}",
+                                    intent.getSubject(), intent.getMetrics(), intent.getDimensions(), intent.getFilters());
+
+                            Subject subject = semanticLayer.getSubject(intent.getSubject());
+
+                            return Flux.concat(
+                                    Flux.just(
+                                            sse(toIntentEvent(intent, subject)),
+                                            sse(new StatusEvent("querying", "正在查询数据库..."))
+                                    ),
+                                    Mono.fromCallable(() -> {
+                                        SqlBuilder.SqlResult sqlResult = new SqlBuilder().build(intent, subject);
+                                        return queryService.execute(sqlResult);
+                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                                    .flatMapMany(data -> {
+                                        Flux<ServerSentEvent<String>> insightStatus = Flux.just(
+                                                sse(new StatusEvent("insight", "查询到 " + data.size() + " 条记录，正在生成洞察..."))
+                                        );
+
+                                        int[] lastEmitted = {0};
+                                        StringBuilder fullText = new StringBuilder();
+
+                                        Flux<ServerSentEvent<String>> insightStream = insightService.generateStream(question, data, credentialId, modelName)
+                                                .flatMap(chunk -> {
+                                                    fullText.append(chunk);
+                                                    int safeLen = insightService.safeDisplayLength(fullText.toString());
+                                                    if (safeLen > lastEmitted[0]) {
+                                                        String delta = fullText.substring(lastEmitted[0], safeLen);
+                                                        lastEmitted[0] = safeLen;
+                                                        return Flux.just(sse(new ChunkEvent(delta)));
+                                                    }
+                                                    return Flux.empty();
+                                                })
+                                                .concatWith(Flux.defer(() -> {
+                                                    Flux<ServerSentEvent<String>> tail = Flux.empty();
+                                                    int safeLen = insightService.safeDisplayLength(fullText.toString());
+                                                    if (safeLen > lastEmitted[0]) {
+                                                        String delta = fullText.substring(lastEmitted[0], safeLen);
+                                                        lastEmitted[0] = safeLen;
+                                                        tail = Flux.just(sse(new ChunkEvent(delta)));
+                                                    }
+                                                    String chartType = insightService.extractChartType(fullText.toString());
+                                                    return tail.concatWith(Flux.just(
+                                                            sse(new ResultEvent(chartType, data, data.size())),
+                                                            sse(new DoneEvent())
+                                                    ));
+                                                }));
+
+                                        return Flux.concat(insightStatus, insightStream);
+                                    })
+                            );
+                        })
+                ).onErrorResume(e -> {
+                    log.error("BI query failed", e);
+                    return Flux.just(
+                            sse(new ErrorEvent(e.getMessage())),
+                            sse(new DoneEvent())
+                    );
+                });
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .cacheControl(CacheControl.noStore().mustRevalidate().sMaxAge(0, TimeUnit.SECONDS))
+                .header("X-Accel-Buffering", "no")
+                .header("Connection", "keep-alive")
+                .body(body);
     }
 
-    private void handleClarification(reactor.core.publisher.FluxSink<String> sink,
-                                      IntentExtractionResult.NeedsClarification nc,
-                                      String question,
-                                      String sessionIdParam,
-                                      Long credentialId,
-                                      String modelName,
-                                      PendingClarification context) {
+    private ServerSentEvent<String> sse(org.ai4j.factory.sse.SseEvent event) {
+        return SseEventSerializer.toServerSentEvent(event);
+    }
+
+    private ClarificationEvent handleClarificationEvent(IntentExtractionResult.NeedsClarification nc,
+                                                        String question,
+                                                        String sessionIdParam,
+                                                        PendingClarification context) {
         List<ClarificationOption> options = buildClarificationOptions(nc);
 
         String sessionId;
@@ -167,9 +194,7 @@ public class BiController {
         );
         clarificationStore.put(sessionId, pending);
 
-        sink.next(SseEventSerializer.toJson(new ClarificationEvent(sessionId, nc.message(), options)));
-        sink.next(SseEventSerializer.toJson(new DoneEvent()));
-        sink.complete();
+        return new ClarificationEvent(sessionId, nc.message(), options);
     }
 
     private List<ClarificationOption> buildClarificationOptions(IntentExtractionResult.NeedsClarification nc) {

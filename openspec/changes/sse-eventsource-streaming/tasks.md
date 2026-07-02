@@ -35,10 +35,17 @@
 - [x] 5.3 更新 `BiArea.test.tsx`：mock `subscribeSSE`，验证 URL 拼接正确（question 正确 URL encode）
 - [x] 5.4 后端运行 `BiControllerTest`，确认 GET 路径测试通过
 
+## 7. React 渲染层修复（automatic batching）
+
+- [x] 7.1 BiArea `onChunk` 回调用 `flushSync` 包裹 `setMessages`，强制每个 chunk 立即提交渲染
+- [x] 7.2 ChatArea `onChunk` 回调同样加 `flushSync`
+- [x] 7.3 运行前端测试，确认 `flushSync` 改动不破坏现有测试
+
 ## 6. 端到端验证
 
 - [x] 6.1 启动后端 `mvn spring-boot:run`，前端 `pnpm dev`
-- [ ] 6.2 浏览器 DevTools Network → `bi/query` 请求 → EventStream 标签，确认每个事件时间戳间隔 50-100ms（不再攒批）
+- [x] 6.2 浏览器 DevTools Network → `bi/query` 请求 → EventStream 标签，确认每个事件时间戳间隔 50-100ms（不再攒批）
 - [ ] 6.3 BI 查询 "看看区域和产品线的销售情况"，肉眼确认洞察文本逐字流式出现
-- [ ] 6.4 Chat 对话 "请用一段话介绍春天"，肉眼确认逐字流式。若仍"一起来"，记录症状并单独开 change 排查 React 渲染层
+  - **状态**：加了 `flushSync` 后仍"突然整段出现"。下一个嫌疑：`Markdown` 组件用 `react-markdown` + `remark-gfm` + `react-syntax-highlighter`，每次 `content` 变化都重新解析整个 markdown，`fullText` 越长解析越慢，可能拖到几百毫秒一次渲染
+- [ ] 6.4 Chat 对话 "请用一段话介绍春天"，肉眼确认逐字流式
 - [x] 6.5 后端 `curl -N -G "http://localhost:8080/api/bi/query" --data-urlencode "question=..." ...` 确认 GET 端点流式正常

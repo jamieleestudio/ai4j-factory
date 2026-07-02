@@ -156,4 +156,5 @@ ChatArea 的"一起来"如果真的是 React batching 导致，需要单独排�
 - **[GET 暴露 question 在 URL]** → question 进 access log、浏览器 history、Referer header。当前是内部 BI 工具，无敏感数据。若未来有合规要求，再补 POST 两步法
 - **[EventSource 自动重连]** → 后端推送 `done` 后前端必须主动 `close()`，否则 EventSource 默认会重连。`subscribeSSE` 在 `onDone` 回调里自动 `close`，调用方无需关心
 - **[Chat 一起来症状可能不消失]** → 如果 React 19 automatic batching 是根因，本 change 不解决。但先用统一 SSE 工具消除代码变量，再单独排查渲染层。tasks 中保留一个验证任务，若 Chat 仍有症状则单独开 change
+- **[React 19 automatic batching 实测确认]** → 端到端验证发现：EventStream 标签显示 chunk 事件分散到达（50-100ms 间隔），但用户画面仍是"文本空白几秒后突然整段出现"。根因是 React 19 的 automatic batching 把多次 `setMessages` 调用合并成一次重渲染。修复：在 `onChunk` 回调里用 `flushSync` 包裹 `setMessages`，强制每次 chunk 立即提交渲染。这是 SSE 传输层之外的 React 渲染层问题，但症状同一，未拆 change
 - **[CORS 预检]** → GET 请求不触发 preflight（简单请求），比 POST 更轻量。`EventSource` 不支持自定义 header，CORS 策略靠 cookie 传递凭证

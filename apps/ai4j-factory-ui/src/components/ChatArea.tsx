@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { PanelLeft } from "lucide-react";
 import ChatInput from "./ChatInput";
 import MessageList from "./MessageList";
@@ -16,6 +17,7 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const subscriptionRef = useRef<SSESubscription | null>(null);
+  const sessionIdRef = useRef<string>(`${Date.now()}-${Math.random().toString(36).slice(2, 11)}`);
   
   const [modelOptions, setModelOptions] = useState<SelectableModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<SelectableModelOption | null>(null);
@@ -62,20 +64,22 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
     // Use explicit backend URL to avoid Next.js proxy buffering in dev mode
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
     // Use the credential-specific endpoint
-    const url = `${baseUrl}/api/chat/stream/${selectedModel.credentialId}?message=${encodeURIComponent(content)}&model=${encodeURIComponent(selectedModel.modelName)}`;
+    const url = `${baseUrl}/api/chat/stream/${selectedModel.credentialId}?message=${encodeURIComponent(content)}&model=${encodeURIComponent(selectedModel.modelName)}&sessionId=${encodeURIComponent(sessionIdRef.current)}`;
 
     const sub = subscribeSSE(url, {
         onChunk: (chunk) => {
-            setMessages(prev => {
-                const newMsgs = [...prev];
-                const lastMsg = newMsgs[newMsgs.length - 1];
-                if (lastMsg && lastMsg.role === "ai") {
-                    newMsgs[newMsgs.length - 1] = {
-                        ...lastMsg,
-                        content: lastMsg.content + chunk
-                    };
-                }
-                return newMsgs;
+            flushSync(() => {
+                setMessages(prev => {
+                    const newMsgs = [...prev];
+                    const lastMsg = newMsgs[newMsgs.length - 1];
+                    if (lastMsg && lastMsg.role === "ai") {
+                        newMsgs[newMsgs.length - 1] = {
+                            ...lastMsg,
+                            content: lastMsg.content + chunk
+                        };
+                    }
+                    return newMsgs;
+                });
             });
         },
         onDone: () => {

@@ -13,6 +13,7 @@ import org.ai4j.factory.bi.semantic.SemanticLayer;
 import org.ai4j.factory.bi.semantic.Subject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
 import java.time.Instant;
@@ -53,10 +54,12 @@ class BiControllerTest {
         when(semanticLayer.getAllSubjects())
                 .thenReturn((Collection<Subject>) List.of(createSubject("订单分析", "订单数据")));
 
-        List<String> events = controller.query("1", 1L, "model", null).collectList().block();
+        List<ServerSentEvent<String>> events = controller.query("1", 1L, "model", null).getBody().collectList().block();
 
         assertNotNull(events);
-        String allEvents = String.join("\n", events);
+        String allEvents = events.stream()
+                .map(ServerSentEvent::data)
+                .reduce("", (left, right) -> left + "\n" + right);
         assertTrue(allEvents.contains("\"type\":\"clarification\""), "should push clarification event");
         assertTrue(allEvents.contains("\"type\":\"done\""), "should push done event");
         assertFalse(allEvents.contains("\"type\":\"intent\""), "should not push intent");
@@ -72,7 +75,7 @@ class BiControllerTest {
         when(semanticLayer.getAllSubjects())
                 .thenReturn((Collection<Subject>) List.of(createSubject("订单分析", "订单数据")));
 
-        controller.query("1", 1L, "model", null).collectList().block();
+        controller.query("1", 1L, "model", null).getBody().collectList().block();
 
         verify(clarificationStore).put(any(String.class), any(PendingClarification.class));
     }
@@ -86,7 +89,7 @@ class BiControllerTest {
         when(semanticLayer.getAllSubjects())
                 .thenReturn((Collection<Subject>) List.of(createSubject("订单分析", "订单数据")));
 
-        controller.query("question", 1L, "model", "unknown-session").collectList().block();
+        controller.query("question", 1L, "model", "unknown-session").getBody().collectList().block();
 
         verify(intentService).extract(eq("question"), any(), any());
         verify(intentService, never()).extractWithContext(any(), any(), any(), any());
@@ -103,7 +106,7 @@ class BiControllerTest {
         Subject subject = createSubject("订单分析", "订单数据");
         when(semanticLayer.getSubject("订单分析")).thenReturn(subject);
 
-        controller.query("订单分析", 1L, "model", "known-session").collectList().block();
+        controller.query("订单分析", 1L, "model", "known-session").getBody().collectList().block();
 
         verify(intentService).extractWithContext(eq("订单分析"), eq(context), any(), any());
         verify(intentService, never()).extract(any(), any(), any());
@@ -134,11 +137,12 @@ class BiControllerTest {
         when(insightService.safeDisplayLength(any())).thenAnswer(inv -> ((String) inv.getArgument(0)).length());
         when(insightService.extractChartType(any())).thenReturn("bar");
 
-        List<String> events = controller.query("华东区销售额", 1L, "model", null).collectList().block();
+        List<ServerSentEvent<String>> events = controller.query("华东区销售额", 1L, "model", null).getBody().collectList().block();
 
         assertNotNull(events);
         String intentEvent = events.stream()
-                .filter(e -> e.contains("\"type\":\"intent\""))
+                .map(ServerSentEvent::data)
+                .filter(e -> e != null && e.contains("\"type\":\"intent\""))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("intent event not found"));
         assertTrue(intentEvent.contains("\"name\":\"区域\""), "intent event should include dimension name");

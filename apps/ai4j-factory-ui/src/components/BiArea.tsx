@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { PanelLeft, BarChart3, Loader2, Brain, ChevronRight } from "lucide-react";
 import ChatInput from "./ChatInput";
 import ChartRenderer from "./ChartRenderer";
@@ -124,7 +125,8 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
   const [modelOptions, setModelOptions] = useState<SelectableModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<SelectableModelOption | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const pendingSessionIdRef = useRef<string | null>(null);
+  const conversationSessionIdRef = useRef<string>(generateId());
+  const pendingClarificationSessionIdRef = useRef<string | null>(null);
   const suppressScrollRef = useRef(false);
   const subscriptionRef = useRef<SSESubscription | null>(null);
 
@@ -164,7 +166,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
     loadCredentials();
   }, []);
 
-  const handleQuery = async (content: string, sessionId?: string) => {
+  const handleQuery = async (content: string, clarificationSessionId?: string) => {
     if (isLoading) return;
 
     if (!selectedModel) {
@@ -192,8 +194,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
     params.set("question", content);
     params.set("credentialId", String(selectedModel.credentialId));
     if (selectedModel.modelName) params.set("modelName", selectedModel.modelName);
-    const sid = sessionId ?? pendingSessionIdRef.current;
-    if (sid) params.set("sessionId", sid);
+    params.set("sessionId", clarificationSessionId ?? conversationSessionIdRef.current);
     const url = `${baseUrl}/api/bi/query?${params.toString()}`;
 
     subscriptionRef.current?.close();
@@ -216,16 +217,18 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
       },
       onChunk: (text) => {
         fullText += text;
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMsgId
-              ? { ...msg, status: "streaming" as const, streamingText: fullText }
-              : msg
-          )
-        );
+        flushSync(() => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMsgId
+                ? { ...msg, status: "streaming" as const, streamingText: fullText }
+                : msg
+            )
+          );
+        });
       },
       onResult: (result) => {
-        pendingSessionIdRef.current = null;
+        pendingClarificationSessionIdRef.current = null;
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id !== assistantMsgId || msg.role !== "assistant") return msg;
@@ -253,7 +256,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
         );
       },
       onClarification: (clarification) => {
-        pendingSessionIdRef.current = clarification.sessionId;
+        pendingClarificationSessionIdRef.current = clarification.sessionId;
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
@@ -271,7 +274,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
         );
       },
       onError: (error) => {
-        pendingSessionIdRef.current = null;
+        pendingClarificationSessionIdRef.current = null;
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
@@ -290,7 +293,7 @@ export default function BiArea({ isSidebarOpen, toggleSidebar }: BiAreaProps) {
   };
 
   const handleChipSelect = (assistantMsgId: string, value: string) => {
-    handleQuery(value);
+    handleQuery(value, pendingClarificationSessionIdRef.current ?? undefined);
   };
 
   return (
