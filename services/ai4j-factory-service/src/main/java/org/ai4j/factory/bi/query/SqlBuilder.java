@@ -5,10 +5,12 @@ import org.ai4j.factory.bi.intent.QueryIntent;
 import org.ai4j.factory.bi.semantic.Dimension;
 import org.ai4j.factory.bi.semantic.Metric;
 import org.ai4j.factory.bi.semantic.Subject;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Component
 public class SqlBuilder {
 
     public SqlResult build(QueryIntent intent, Subject subject) {

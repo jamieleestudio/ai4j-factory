@@ -1,4 +1,4 @@
-import { Plus, MessageSquare, Settings, Menu, X, Sun, Moon, BarChart3 } from "lucide-react";
+import { Plus, Settings, X, Sun, Moon, BarChart3 } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -76,16 +76,6 @@ export default function Sidebar({ isOpen, setIsOpen, activeMode, onModeChange }:
 
           <div className="flex flex-col gap-1">
             <div className="text-xs font-medium text-gray-500 px-4 py-2 mb-1">Recent</div>
-            {/* Dummy History Items */}
-            {["React Server Components", "Next.js 14 Features", "Tailwind CSS Grid", "AI Model Comparison", "System Architecture"].map((item, i) => (
-              <button
-                key={i}
-                className="group flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors truncate w-full text-left"
-              >
-                <MessageSquare size={16} className="text-gray-500 group-hover:text-foreground transition-colors flex-shrink-0" />
-                <span className="truncate opacity-90 group-hover:opacity-100">{item}</span>
-              </button>
-            ))}
           </div>
         </div>
 

@@ -14,6 +14,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 
@@ -33,6 +34,7 @@ public class ChatClientFactory {
                 .build();
     }
 
+    @Transactional
     public ChatClient create(Long credentialId, String modelName) {
         String normalizedModelName = normalizeModelName(modelName);
         return cache.get(new ChatClientCacheKey(credentialId, normalizedModelName),

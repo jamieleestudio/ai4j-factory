@@ -1,7 +1,5 @@
 package org.ai4j.factory.bi.intent;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.ai4j.factory.bi.clarification.PendingClarification;
 import org.ai4j.factory.bi.semantic.Dimension;
 import org.ai4j.factory.bi.semantic.Metric;
@@ -10,8 +8,10 @@ import org.ai4j.factory.bi.semantic.Subject;
 import org.ai4j.factory.chat.ChatClientFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -23,12 +23,12 @@ public class IntentExtractionService {
 
     private final ChatClientFactory chatClientFactory;
     private final SemanticLayer semanticLayer;
-    private final ObjectMapper objectMapper;
+    private final BeanOutputConverter<IntentExtractionPayload> outputConverter;
 
     public IntentExtractionService(ChatClientFactory chatClientFactory, SemanticLayer semanticLayer) {
         this.chatClientFactory = chatClientFactory;
         this.semanticLayer = semanticLayer;
-        this.objectMapper = new ObjectMapper();
+        this.outputConverter = new BeanOutputConverter<>(IntentExtractionPayload.class);
     }
 
     public IntentExtractionResult extract(String question, Long credentialId, String modelName) {
@@ -36,13 +36,16 @@ public class IntentExtractionService {
     }
 
     public IntentExtractionResult extractWithContext(String question, PendingClarification context,
-                                                      Long credentialId, String modelName) {
+                                                     Long credentialId, String modelName) {
         var chatClient = chatClientFactory.create(credentialId, modelName);
-        String prompt = buildExtractionPrompt(question, context);
         String lastResponse = null;
 
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            String response = chatClient.prompt().user(prompt).call().content();
+            String response = chatClient.prompt()
+                    .system(buildSystemPrompt(context))
+                    .user(buildUserPrompt(question, lastResponse, attempt == 0 ? null : "输出未通过解析或校验，请严格修正"))
+                    .call()
+                    .content();
             lastResponse = response;
             try {
                 IntentExtractionResult result = parseResponse(response);
@@ -50,9 +53,6 @@ public class IntentExtractionService {
                 return coerceEmptyMetrics(result);
             } catch (Exception e) {
                 log.warn("Intent extraction attempt {} failed: {}", attempt + 1, e.getMessage());
-                if (attempt < MAX_RETRIES) {
-                    prompt = buildCorrectionPrompt(question, context, response, e.getMessage());
-                }
             }
         }
 
@@ -60,10 +60,10 @@ public class IntentExtractionService {
                 + " attempts. Last response: " + lastResponse);
     }
 
-    private String buildExtractionPrompt(String question, PendingClarification context) {
+    private String buildSystemPrompt(PendingClarification context) {
         StringBuilder sb = new StringBuilder();
         sb.append("""
-                你是一个数据分析助手。根据用户的自然语言问题，提取结构化的查询意图。
+                你是一个 BI 查询意图识别助手。请根据用户的自然语言问题，输出结构化查询意图。
 
                 ## 可用的数据主题
 
@@ -78,7 +78,7 @@ public class IntentExtractionService {
             sb.append(context.originalQuestion()).append("\n");
             sb.append("系统建议的选项：");
             String optionsText = context.options().stream()
-                    .map(o -> o.label() + "(" + o.value() + ")")
+                    .map(option -> option.label() + "(" + option.value() + ")")
                     .collect(Collectors.joining(", "));
             sb.append(optionsText).append("\n\n");
             sb.append("请基于上下文理解用户本次输入。如果用户的选择已经明确了主题和指标，输出 status=\"ready\"。\n\n");
@@ -97,54 +97,37 @@ public class IntentExtractionService {
                 5. 如果用户没有提到任何维度，dimensions 返回空数组
                 6. 如果用户提到了过滤条件（如"华东区"、"电子产品"），放到 filters 数组中
                 7. filters 中 operator 取值为 "=" 或 "!=" 或 ">" 或 "<"
-                8. 只返回 JSON，不要其他文字
-
-                ## 用户问题
-                """);
-        sb.append(question);
-
-        sb.append("""
+                8. 只输出符合格式的 JSON，不要补充解释
+                9. 如果用户只是在回答上一次澄清问题，请结合上下文补全缺失信息
 
                 ## 输出格式
-
-                明确时：
-                {"status":"ready", "subject":"主题名", "metrics":["指标1"], "dimensions":["维度1"], "filters":[{"dimension":"维度名", "operator":"=", "value":"值"}]}
-
-                需要澄清时（question_unclear / subject_ambiguous）：
-                {"status":"needs_clarification", "reason":"question_unclear", "message":"请选择您想分析的数据主题"}
-                {"status":"needs_clarification", "reason":"subject_ambiguous", "message":"请选择数据主题", "metric":"销售额"}
-
-                需要澄清时（metric_unspecified）：
-                {"status":"needs_clarification", "reason":"metric_unspecified", "message":"请选择您想查看的指标", "subject":"订单分析"}
                 """);
+        sb.append(outputConverter.getFormat());
         return sb.toString();
     }
 
-    private String buildCorrectionPrompt(String question, PendingClarification context,
-                                          String previousResponse, String error) {
-        return """
-                你上一次的回答有错误：%s
+    private String buildUserPrompt(String question, String previousResponse, String error) {
+        StringBuilder sb = new StringBuilder();
+        if (previousResponse != null && error != null) {
+            sb.append("""
+                    ## 修正要求
+                    上一次输出存在问题：""");
+            sb.append(error).append("\n");
+            sb.append("上一次输出内容：\n").append(previousResponse).append("\n\n");
+            sb.append("请修正后重新输出。\n\n");
+        }
 
-                请修正后重新输出。确保只使用可用的主题、指标和维度名称。
-
+        sb.append("""
                 ## 用户问题
-                %s
-
-                ## 输出格式
-                {"status":"ready", "subject":"主题名", "metrics":["指标1"], "dimensions":["维度1"], "filters":[{"dimension":"维度名", "operator":"=", "value":"值"}]}
-
-                或：
-                {"status":"needs_clarification", "reason":"question_unclear"|"subject_ambiguous"|"metric_unspecified", "message":"...", "subject":"可选", "metric":"可选"}
-                """.formatted(error, question);
+                """);
+        sb.append(question);
+        return sb.toString();
     }
 
     IntentExtractionResult parseResponse(String response) {
-        try {
-            String json = extractJson(response);
-            return objectMapper.readValue(json, IntentExtractionResult.class);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to parse LLM intent response: " + response, e);
-        }
+        String json = extractJson(response);
+        IntentExtractionPayload payload = outputConverter.convert(json);
+        return payload.toResult();
     }
 
     private String extractJson(String response) {
@@ -164,7 +147,8 @@ public class IntentExtractionService {
             Subject subject = semanticLayer.getSubject(ready.subject());
 
             Set<String> metricNames = subject.getMetrics().stream()
-                    .map(Metric::getName).collect(Collectors.toSet());
+                    .map(Metric::getName)
+                    .collect(Collectors.toSet());
             for (String metric : ready.metrics()) {
                 if (!metricNames.contains(metric)) {
                     throw new IllegalArgumentException(
@@ -173,11 +157,12 @@ public class IntentExtractionService {
             }
 
             Set<String> dimensionNames = subject.getDimensions().stream()
-                    .map(Dimension::getName).collect(Collectors.toSet());
-            for (String dim : ready.dimensions()) {
-                if (!dimensionNames.contains(dim)) {
+                    .map(Dimension::getName)
+                    .collect(Collectors.toSet());
+            for (String dimension : ready.dimensions()) {
+                if (!dimensionNames.contains(dimension)) {
                     throw new IllegalArgumentException(
-                            "Unknown dimension '" + dim + "'. Available: " + dimensionNames);
+                            "Unknown dimension '" + dimension + "'. Available: " + dimensionNames);
                 }
             }
 
@@ -203,5 +188,23 @@ public class IntentExtractionService {
             }
         }
         return result;
+    }
+
+    private record IntentExtractionPayload(
+            String status,
+            String reason,
+            String message,
+            String subject,
+            String metric,
+            List<String> metrics,
+            List<String> dimensions,
+            List<Filter> filters
+    ) {
+        IntentExtractionResult toResult() {
+            if ("needs_clarification".equals(status)) {
+                return new IntentExtractionResult.NeedsClarification(reason, message, subject, metric);
+            }
+            return new IntentExtractionResult.Ready(subject, metrics, dimensions, filters);
+        }
     }
 }
