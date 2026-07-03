@@ -72,6 +72,47 @@ describe("parseSSELine", () => {
     });
   });
 
+  test("parses trace START event", () => {
+    const result = parseSSELine(
+      'data: {"type":"trace","spanId":"intent-extraction","parentId":null,"name":"intent-extraction","status":"START"}'
+    );
+    expect(result).toEqual({
+      type: "trace",
+      spanId: "intent-extraction",
+      parentId: null,
+      name: "intent-extraction",
+      status: "START",
+    });
+  });
+
+  test("parses trace END event with attributes", () => {
+    const result = parseSSELine(
+      'data: {"type":"trace","spanId":"llm-call-1","parentId":"intent-extraction","name":"llm-call","status":"END","attributes":{"attempt":1,"rawOutput":"{}","error":"Unknown metric"}}'
+    );
+    expect(result).toEqual({
+      type: "trace",
+      spanId: "llm-call-1",
+      parentId: "intent-extraction",
+      name: "llm-call",
+      status: "END",
+      attributes: { attempt: 1, rawOutput: "{}", error: "Unknown metric" },
+    });
+  });
+
+  test("parses trace event with unknown name without affecting dispatch", () => {
+    const result = parseSSELine(
+      'data: {"type":"trace","spanId":"x","name":"some-future-phase","status":"END"}'
+    );
+    expect(result).toEqual({
+      type: "trace",
+      spanId: "x",
+      parentId: undefined,
+      name: "some-future-phase",
+      status: "END",
+      attributes: undefined,
+    });
+  });
+
   test("returns null for non-data lines", () => {
     expect(parseSSELine("event: message")).toBeNull();
   });
@@ -140,9 +181,10 @@ describe("subscribeSSE", () => {
     const onClarification = vi.fn();
     const onError = vi.fn();
     const onDone = vi.fn();
+    const onTrace = vi.fn();
 
     subscribeSSE("http://example.com/stream", {
-      onStatus, onIntent, onChunk, onResult, onClarification, onError, onDone,
+      onStatus, onIntent, onChunk, onResult, onClarification, onError, onDone, onTrace,
     });
 
     expect(ctor).toHaveBeenCalledTimes(1);
@@ -162,6 +204,16 @@ describe("subscribeSSE", () => {
 
     instance.onmessage!({ data: '{"type":"clarification","sessionId":"s1","message":"pick","options":[]}' });
     expect(onClarification).toHaveBeenCalledWith({ sessionId: "s1", message: "pick", options: [] });
+
+    instance.onmessage!({ data: '{"type":"trace","spanId":"s1","name":"intent-extraction","status":"START"}' });
+    expect(onTrace).toHaveBeenCalledWith({
+      type: "trace",
+      spanId: "s1",
+      parentId: undefined,
+      name: "intent-extraction",
+      status: "START",
+      attributes: undefined,
+    });
 
     instance.onmessage!({ data: '{"type":"error","message":"boom"}' });
     expect(onError).toHaveBeenCalledWith("boom");

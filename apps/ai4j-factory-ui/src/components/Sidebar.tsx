@@ -1,22 +1,28 @@
-import { Plus, Settings, X, Sun, Moon, BarChart3 } from "lucide-react";
+import { Plus, Settings, X, Sun, Moon, BarChart3, MessageSquare, MoreHorizontal } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import CredentialManager from "./CredentialManager";
 import { AppMode } from "./ChatInterface";
+import { type RecentSession, formatRelativeTime } from "../hooks/useRecentSessions";
 
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   activeMode: AppMode;
   onModeChange: (mode: AppMode) => void;
+  recentSessions: RecentSession[];
+  activeSessionId: string | null;
+  onRecentClick: (session: RecentSession) => void;
+  onRecentDelete: (id: string) => void;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, activeMode, onModeChange }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, activeMode, onModeChange, recentSessions, activeSessionId, onRecentClick, onRecentDelete }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -74,9 +80,71 @@ export default function Sidebar({ isOpen, setIsOpen, activeMode, onModeChange }:
             <span className="font-medium">Data Warehouse BI</span>
           </button>
 
-          <div className="flex flex-col gap-1">
-            <div className="text-xs font-medium text-gray-500 px-4 py-2 mb-1">Recent</div>
-          </div>
+          {recentSessions.length > 0 && (
+            <div className="flex flex-col gap-1 mt-4">
+              <div className="text-xs font-medium text-gray-500 px-4 py-2 mb-1">Recent</div>
+              {recentSessions.map((session) => (
+                <div
+                  key={session.id}
+                  className="group relative"
+                >
+                  <button
+                    onClick={() => onRecentClick(session)}
+                    className={clsx(
+                      "flex items-center gap-3 w-full px-4 py-2 rounded-lg text-left text-sm transition-colors pr-8",
+                      activeSessionId === session.id
+                        ? "bg-black/5 dark:bg-white/5"
+                        : "hover:bg-black/5 dark:hover:bg-white/5"
+                    )}
+                  >
+                    {session.mode === "chat" ? (
+                      <MessageSquare size={16} className="text-gray-400 flex-shrink-0" />
+                    ) : (
+                      <BarChart3 size={16} className="text-gray-400 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate text-foreground">{session.title}</div>
+                      <div className="text-xs text-gray-500">{formatRelativeTime(session.timestamp)}</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpenId(menuOpenId === session.id ? null : session.id);
+                    }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-opacity z-10"
+                    aria-label="更多"
+                  >
+                    <MoreHorizontal size={16} className="text-gray-400" />
+                  </button>
+                  {menuOpenId === session.id && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-20"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId(null);
+                        }}
+                      />
+                      <div className="absolute right-2 top-full mt-1 z-30 bg-white dark:bg-[#2d2d2d] border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[100px]">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRecentDelete(session.id);
+                            setMenuOpenId(null);
+                          }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          <X size={14} />
+                          <span>删除</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-auto p-4 flex flex-col gap-2">

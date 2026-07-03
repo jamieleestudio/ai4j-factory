@@ -12,7 +12,8 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = ClarificationEvent.class, name = "clarification"),
         @JsonSubTypes.Type(value = ErrorEvent.class, name = "error"),
         @JsonSubTypes.Type(value = DoneEvent.class, name = "done"),
+        @JsonSubTypes.Type(value = TraceEvent.class, name = "trace"),
 })
 public sealed interface SseEvent
-        permits StatusEvent, IntentEvent, ChunkEvent, ResultEvent, ClarificationEvent, ErrorEvent, DoneEvent {
+        permits StatusEvent, IntentEvent, ChunkEvent, ResultEvent, ClarificationEvent, ErrorEvent, DoneEvent, TraceEvent {
 }

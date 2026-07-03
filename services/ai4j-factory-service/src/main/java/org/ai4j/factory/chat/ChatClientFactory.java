@@ -11,6 +11,8 @@ import com.openai.core.ClientOptions;
 import org.ai4j.factory.shared.credential.entity.ModelCredential;
 import org.ai4j.factory.shared.credential.repository.ModelCredentialRepository;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
@@ -25,13 +27,15 @@ public class ChatClientFactory {
 
     private final ModelCredentialRepository credentialRepository;
     private final Cache<ChatClientCacheKey, ChatClient> cache;
+    private final MessageChatMemoryAdvisor memoryAdvisor;
 
-    public ChatClientFactory(ModelCredentialRepository credentialRepository) {
+    public ChatClientFactory(ModelCredentialRepository credentialRepository, ChatMemory chatMemory) {
         this.credentialRepository = credentialRepository;
         this.cache = Caffeine.newBuilder()
                 .maximumSize(100)
                 .expireAfterAccess(Duration.ofMinutes(30))
                 .build();
+        this.memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory).build();
     }
 
     @Transactional
@@ -88,7 +92,9 @@ public class ChatClientFactory {
                         .build())
                 .build();
 
-        return ChatClient.builder(chatModel).build();
+        return ChatClient.builder(chatModel)
+                .defaultAdvisors(memoryAdvisor)
+                .build();
     }
 
     private String normalizeModelName(String modelName) {

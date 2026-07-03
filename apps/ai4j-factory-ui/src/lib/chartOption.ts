@@ -15,6 +15,17 @@ function str(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
+const THEME_COLORS = [
+  "#2563eb", // blue-600
+  "#0ea5e9", // sky-500
+  "#6366f1", // indigo-500
+  "#38bdf8", // sky-400
+  "#818cf8", // indigo-400
+  "#0284c7", // sky-600
+  "#4f46e5", // indigo-600
+  "#93c5fd", // blue-300
+];
+
 export function buildOption(
   chartType: ChartType,
   data: Row[],
@@ -32,6 +43,7 @@ export function buildOption(
     case "bar": {
       const d0 = dims[0].name;
       return {
+        color: THEME_COLORS,
         xAxis: { type: "category", data: data.map((r) => str(r[d0])) },
         yAxis: { type: "value" },
         series: [{ type: "bar", data: data.map((r) => num(r[metric])) }],
@@ -43,6 +55,7 @@ export function buildOption(
     case "pie": {
       const d0 = dims[0].name;
       return {
+        color: THEME_COLORS,
         series: [
           {
             type: "pie",
@@ -56,6 +69,7 @@ export function buildOption(
     case "line": {
       const d0 = dims[0].name;
       return {
+        color: THEME_COLORS,
         xAxis: { type: "category", data: data.map((r) => str(r[d0])) },
         yAxis: { type: "value" },
         series: [{ type: "line", data: data.map((r) => num(r[metric])) }],
@@ -72,6 +86,7 @@ export function buildOption(
       const xValues = [...new Set(data.map((r) => str(r[d0])))];
       const seriesValues = [...new Set(data.map((r) => str(r[d1])))];
       return {
+        color: THEME_COLORS,
         xAxis: { type: "category", data: xValues },
         yAxis: { type: "value" },
         series: seriesValues.map((sv) => ({
@@ -100,6 +115,7 @@ export function buildOption(
       const min = values.length > 0 ? Math.min(...values) : 0;
       const max = values.length > 0 ? Math.max(...values) : 0;
       return {
+        color: THEME_COLORS,
         tooltip: { position: "top" },
         grid: { height: "60%", top: "10%" },
         xAxis: { type: "category", data: xValues },
@@ -111,6 +127,9 @@ export function buildOption(
           orient: "horizontal",
           left: "center",
           bottom: "5%",
+          inRange: {
+            color: ["#eff6ff", "#60a5fa", "#1e40af"], // 浅蓝到深蓝
+          },
         },
         series: [
           {
@@ -134,6 +153,7 @@ export function buildOption(
       const xValues = [...new Set(data.map((r) => str(r[d0])))];
       const seriesValues = [...new Set(data.map((r) => str(r[d1])))];
       return {
+        color: THEME_COLORS,
         xAxis: { type: "category", data: xValues },
         yAxis: { type: "value" },
         series: seriesValues.map((sv) => ({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useTheme } from "next-themes";
 import * as echarts from "echarts/core";
 import { BarChart, LineChart, PieChart, HeatmapChart } from "echarts/charts";
 import {
@@ -29,22 +30,43 @@ echarts.use([
 export default function EChart({ option }: { option: EChartsOption }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
+  const { resolvedTheme } = useTheme();
 
+  // Handle initialization and theme change
   useEffect(() => {
     if (!containerRef.current) return;
-    const chart = echarts.init(containerRef.current);
+    
+    // Dispose old instance if theme changes
+    if (chartRef.current) {
+      chartRef.current.dispose();
+    }
+    
+    const theme = resolvedTheme === "dark" ? "dark" : undefined;
+    const chart = echarts.init(containerRef.current, theme, {
+      renderer: "canvas",
+    });
+    
     chartRef.current = chart;
     chart.setOption(option, true);
+    
     return () => {
       chart.dispose();
       chartRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [resolvedTheme]); // Re-init when theme changes
 
   useEffect(() => {
-    chartRef.current?.setOption(option, true);
-  }, [option]);
+    // Merge transparent background for dark theme to fit our UI
+    if (chartRef.current) {
+      const isDark = resolvedTheme === "dark";
+      const finalOption = {
+        backgroundColor: "transparent",
+        ...option,
+      };
+      chartRef.current.setOption(finalOption, true);
+    }
+  }, [option, resolvedTheme]);
 
   useEffect(() => {
     const onResize = () => chartRef.current?.resize();

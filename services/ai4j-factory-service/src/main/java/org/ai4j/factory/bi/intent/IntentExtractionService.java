@@ -6,13 +6,19 @@ import org.ai4j.factory.bi.semantic.Metric;
 import org.ai4j.factory.bi.semantic.SemanticLayer;
 import org.ai4j.factory.bi.semantic.Subject;
 import org.ai4j.factory.chat.ChatClientFactory;
+import org.ai4j.factory.sse.TraceEvent;
+import org.ai4j.factory.sse.TraceStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,6 +26,8 @@ public class IntentExtractionService {
 
     private static final Logger log = LoggerFactory.getLogger(IntentExtractionService.class);
     private static final int MAX_RETRIES = 2;
+    private static final String SPAN_ID = "intent-extraction";
+    private static final String RETRY_FEEDBACK = "输出未通过解析或校验，请严格修正";
 
     private final ChatClientFactory chatClientFactory;
     private final SemanticLayer semanticLayer;
@@ -37,25 +45,57 @@ public class IntentExtractionService {
 
     public IntentExtractionResult extractWithContext(String question, PendingClarification context,
                                                      Long credentialId, String modelName) {
+        return extractWithContext(question, context, credentialId, modelName, null);
+    }
+
+    public IntentExtractionResult extractWithContext(String question, PendingClarification context,
+                                                     Long credentialId, String modelName,
+                                                     Consumer<TraceEvent> traceEmitter) {
+        Consumer<TraceEvent> emitter = traceEmitter == null ? e -> {} : traceEmitter;
         var chatClient = chatClientFactory.create(credentialId, modelName);
         String lastResponse = null;
 
+        emitter.accept(new TraceEvent(
+                SPAN_ID, null, SPAN_ID, TraceStatus.START, null));
+
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            String response = chatClient.prompt()
-                    .system(buildSystemPrompt(context))
-                    .user(buildUserPrompt(question, lastResponse, attempt == 0 ? null : "输出未通过解析或校验，请严格修正"))
-                    .call()
-                    .content();
+            String attemptLabel = String.valueOf(attempt + 1);
+            String childSpanId = "llm-call-" + attemptLabel;
+            Map<String, Object> startAttrs = new LinkedHashMap<>();
+            startAttrs.put("attempt", attempt + 1);
+            if (attempt > 0) {
+                startAttrs.put("feedback", RETRY_FEEDBACK);
+            }
+            emitter.accept(new TraceEvent(
+                    childSpanId, SPAN_ID, "llm-call", TraceStatus.START, startAttrs));
+
+            String response = callLlm(chatClient, buildSystemPrompt(context),
+                    buildUserPrompt(question, lastResponse, attempt == 0 ? null : RETRY_FEEDBACK));
             lastResponse = response;
+
+            Map<String, Object> endAttrs = new LinkedHashMap<>();
+            endAttrs.put("attempt", attempt + 1);
+            endAttrs.put("rawOutput", response);
+
             try {
                 IntentExtractionResult result = parseResponse(response);
                 validate(result);
-                return coerceEmptyMetrics(result);
+                IntentExtractionResult coerced = coerceEmptyMetrics(result);
+                emitter.accept(new TraceEvent(
+                        childSpanId, SPAN_ID, "llm-call", TraceStatus.END, endAttrs));
+                emitter.accept(new TraceEvent(
+                        SPAN_ID, null, SPAN_ID, TraceStatus.END, null));
+                return coerced;
             } catch (Exception e) {
+                endAttrs.put("error", e.getMessage());
+                emitter.accept(new TraceEvent(
+                        childSpanId, SPAN_ID, "llm-call", TraceStatus.END, endAttrs));
                 log.warn("Intent extraction attempt {} failed: {}", attempt + 1, e.getMessage());
             }
         }
 
+        emitter.accept(new TraceEvent(
+                SPAN_ID, null, SPAN_ID, TraceStatus.END, null));
         throw new RuntimeException("Intent extraction failed after " + (MAX_RETRIES + 1)
                 + " attempts. Last response: " + lastResponse);
     }
@@ -128,6 +168,14 @@ public class IntentExtractionService {
         String json = extractJson(response);
         IntentExtractionPayload payload = outputConverter.convert(json);
         return payload.toResult();
+    }
+
+    String callLlm(org.springframework.ai.chat.client.ChatClient chatClient, String systemPrompt, String userPrompt) {
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .user(userPrompt)
+                .call()
+                .content();
     }
 
     private String extractJson(String response) {

@@ -66,6 +66,28 @@ public class SemanticLayer {
         return Collections.unmodifiableCollection(subjectsByName.values());
     }
 
+    public List<SubjectTracePayload> toTracePayload() {
+        return subjectsByName.values().stream()
+                .map(s -> new SubjectTracePayload(
+                        s.getName(),
+                        s.getDescription(),
+                        s.getMetrics() == null ? List.of() : s.getMetrics().stream()
+                                .map(m -> new MetricTracePayload(
+                                        m.getName(),
+                                        m.getDescription(),
+                                        m.getAggregation() == null ? null : m.getAggregation().name()
+                                ))
+                                .toList(),
+                        s.getDimensions() == null ? List.of() : s.getDimensions().stream()
+                                .map(d -> new DimensionTracePayload(
+                                        d.getName(),
+                                        d.getType() == null ? null : d.getType().name()
+                                ))
+                                .toList()
+                ))
+                .toList();
+    }
+
     public String toPromptSummary() {
         StringBuilder sb = new StringBuilder();
         for (Subject subject : subjectsByName.values()) {

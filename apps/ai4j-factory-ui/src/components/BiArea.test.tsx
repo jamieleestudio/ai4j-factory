@@ -83,16 +83,36 @@ function biEvents(
 ) {
   return [
     { type: "status", stage: "analyzing", message: "正在分析你的问题..." },
-    {
-      type: "intent",
-      subject: "orders",
-      metrics: ["sales_amount"],
-      dimensions,
-      filters: [{ dimension: "region", operator: "=", value: "华东" }],
-    },
+    { type: "intent", subject: "orders", metrics: ["sales_amount"], dimensions, filters: [{ dimension: "region", operator: "=", value: "华东" }] },
     { type: "status", stage: "querying", message: "正在查询数据库..." },
     { type: "status", stage: "insight", message: `查询到 ${data.length} 条记录，正在生成洞察...` },
     { type: "chunk", content: summary },
+    { type: "result", chartType, data, rowCount: data.length },
+    { type: "done" },
+  ];
+}
+
+function biEventsWithTrace(
+  summary: string,
+  data: Record<string, unknown>[],
+  chartType: string
+) {
+  return [
+    { type: "status", stage: "analyzing", message: "正在分析你的问题..." },
+    { type: "trace", spanId: "semantic-context", name: "semantic-context", status: "END", attributes: { subjects: [{ name: "orders" }] } },
+    { type: "trace", spanId: "intent-extraction", name: "intent-extraction", status: "START" },
+    { type: "trace", spanId: "llm-call-1", parentId: "intent-extraction", name: "llm-call", status: "START", attributes: { attempt: 1 } },
+    { type: "trace", spanId: "llm-call-1", parentId: "intent-extraction", name: "llm-call", status: "END", attributes: { attempt: 1, rawOutput: "{}" } },
+    { type: "trace", spanId: "intent-extraction", name: "intent-extraction", status: "END" },
+    { type: "trace", spanId: "sql-build", name: "sql-build", status: "END" },
+    { type: "intent", subject: "orders", metrics: ["sales_amount"], dimensions: [{ name: "region", type: "STRING" }], filters: [] },
+    { type: "status", stage: "querying", message: "正在查询数据库..." },
+    { type: "trace", spanId: "query-execute", name: "query-execute", status: "START" },
+    { type: "trace", spanId: "query-execute", name: "query-execute", status: "END", attributes: { rowCount: 1 } },
+    { type: "status", stage: "insight", message: `查询到 ${data.length} 条记录，正在生成洞察...` },
+    { type: "trace", spanId: "insight-generation", name: "insight-generation", status: "START" },
+    { type: "chunk", content: summary },
+    { type: "trace", spanId: "insight-generation", name: "insight-generation", status: "END", attributes: { chartType } },
     { type: "result", chartType, data, rowCount: data.length },
     { type: "done" },
   ];
@@ -183,7 +203,7 @@ describe("BiArea", () => {
     expect(container.textContent).toContain("orders");
     expect(container.textContent).toContain("sales_amount");
     expect(container.textContent).toContain("region");
-    expect(container.textContent).toContain("Thinking");
+    expect(container.textContent).toContain("思考过程");
 
     expect(container.textContent).not.toContain("<<CHART:");
   });
@@ -344,5 +364,137 @@ describe("BiArea", () => {
     expect(instances[0].url).toContain("question=" + encodeURIComponent("华东区销售额多少"));
     expect(instances[0].url).toContain("credentialId=1");
     expect(instances[0].url).toContain("modelName=gpt-test");
+  });
+
+  test("accumulates trace events and renders timeline during streaming", async () => {
+    const user = userEvent.setup();
+    const { instances } = installMockEventSource();
+
+    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+
+    await screen.findByText("gpt-test");
+    const input = screen.getByPlaceholderText("Ask anything...");
+    await user.type(input, "华东区销售额多少");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+
+    // Emit just the first few events including semantic-context trace
+    emit(instances[0], { type: "status", stage: "analyzing", message: "正在分析你的问题..." });
+    emit(instances[0], { type: "trace", spanId: "semantic-context", name: "semantic-context", status: "END", attributes: { subjects: [{ name: "orders" }] } });
+    emit(instances[0], { type: "trace", spanId: "intent-extraction", name: "intent-extraction", status: "START" });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("语义层加载");
+      expect(container.textContent).toContain("意图提取");
+    });
+  });
+
+  test("renders nested llm-call span indented under intent-extraction", async () => {
+    const user = userEvent.setup();
+    const { instances } = installMockEventSource();
+
+    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+
+    await screen.findByText("gpt-test");
+    const input = screen.getByPlaceholderText("Ask anything...");
+    await user.type(input, "华东区销售额多少");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+    feedEvents(instances[0], biEventsWithTrace("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("markdown").textContent).toContain("华东区销售额为 100。");
+    });
+
+    // After done, timeline is collapsed — expand it
+    const expandButton = screen.getByRole("button", { name: /思考过程/ });
+    await user.click(expandButton);
+
+    // Verify all spans render
+    expect(container.textContent).toContain("语义层加载");
+    expect(container.textContent).toContain("意图提取");
+    expect(container.textContent).toContain("LLM 调用");
+    expect(container.textContent).toContain("SQL 构建");
+    expect(container.textContent).toContain("查询执行");
+    expect(container.textContent).toContain("洞察生成");
+
+    // Verify llm-call is nested under intent-extraction (rendered after, indented)
+    const allText = container.textContent ?? "";
+    const intentIdx = allText.indexOf("意图提取");
+    const llmCallIdx = allText.indexOf("LLM 调用");
+    expect(intentIdx).toBeGreaterThanOrEqual(0);
+    expect(llmCallIdx).toBeGreaterThan(intentIdx);
+  });
+
+  test("auto-collapses timeline on done and allows re-expand", async () => {
+    const user = userEvent.setup();
+    const { instances } = installMockEventSource();
+
+    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+
+    await screen.findByText("gpt-test");
+    const input = screen.getByPlaceholderText("Ask anything...");
+    await user.type(input, "华东区销售额多少");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+    feedEvents(instances[0], biEventsWithTrace("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value"));
+
+    // After done, the timeline is collapsed — span labels should NOT be visible
+    await waitFor(() => {
+      expect(screen.getByTestId("markdown").textContent).toContain("华东区销售额为 100。");
+    });
+
+    // Collapsed: spans not visible
+    expect(container.textContent).not.toContain("语义层加载");
+    expect(container.textContent).toContain("思考过程");
+
+    // Click to expand
+    const expandButton = screen.getByRole("button", { name: /思考过程/ });
+    await user.click(expandButton);
+
+    // Now spans should be visible
+    expect(container.textContent).toContain("语义层加载");
+    expect(container.textContent).toContain("意图提取");
+  });
+
+  test("clicking a span expands its attributes", async () => {
+    const user = userEvent.setup();
+    const { instances } = installMockEventSource();
+
+    const { container } = render(<BiArea isSidebarOpen={false} toggleSidebar={() => {}} />);
+
+    await screen.findByText("gpt-test");
+    const input = screen.getByPlaceholderText("Ask anything...");
+    await user.type(input, "华东区销售额多少");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(instances.length).toBe(1);
+    });
+    feedEvents(instances[0], biEventsWithTrace("华东区销售额为 100。", [{ region: "华东", amount: 100 }], "single_value"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("markdown").textContent).toContain("华东区销售额为 100。");
+    });
+
+    // Expand timeline
+    const expandButton = screen.getByRole("button", { name: /思考过程/ });
+    await user.click(expandButton);
+
+    // Click on the query-execute span label (which has rowCount attribute)
+    const queryExecuteLabel = screen.getByText("查询执行");
+    await user.click(queryExecuteLabel);
+
+    // The attributes JSON should now be visible
+    expect(container.textContent).toContain("rowCount");
   });
 });

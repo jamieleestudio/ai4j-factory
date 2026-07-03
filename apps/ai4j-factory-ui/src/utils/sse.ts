@@ -34,6 +34,15 @@ export type ClarificationPayload = {
   options: ClarificationOption[];
 };
 
+export type TraceEventPayload = {
+  type: "trace";
+  spanId: string;
+  parentId?: string;
+  name: string;
+  status: "START" | "END";
+  attributes?: Record<string, unknown>;
+};
+
 export type SseEvent =
   | { type: "status"; stage: string; message: string }
   | { type: "intent"; subject: string; metrics: string[]; dimensions: IntentDimension[]; filters: IntentFilter[] }
@@ -41,6 +50,7 @@ export type SseEvent =
   | { type: "result"; chartType: string; data: Record<string, unknown>[]; rowCount: number }
   | { type: "clarification"; sessionId: string; message: string; options: ClarificationOption[] }
   | { type: "error"; message: string }
+  | { type: "trace"; spanId: string; parentId?: string; name: string; status: "START" | "END"; attributes?: Record<string, unknown> }
   | { type: "done" };
 
 export interface SSECallbacks {
@@ -49,6 +59,7 @@ export interface SSECallbacks {
   onChunk?: (content: string) => void;
   onResult?: (result: ResultPayload) => void;
   onClarification?: (clarification: ClarificationPayload) => void;
+  onTrace?: (event: TraceEventPayload) => void;
   onError?: (message: string) => void;
   onDone?: () => void;
 }
@@ -105,6 +116,16 @@ function dispatch(event: SseEvent, callbacks: SSECallbacks): void {
         sessionId: event.sessionId,
         message: event.message,
         options: event.options,
+      });
+      break;
+    case "trace":
+      callbacks.onTrace?.({
+        type: "trace",
+        spanId: event.spanId,
+        parentId: event.parentId,
+        name: event.name,
+        status: event.status,
+        attributes: event.attributes,
       });
       break;
     case "error":

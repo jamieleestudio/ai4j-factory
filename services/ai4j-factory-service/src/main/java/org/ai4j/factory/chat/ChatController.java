@@ -1,14 +1,16 @@
 package org.ai4j.factory.chat;
 
 import jakarta.validation.constraints.NotBlank;
+
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
-
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -25,11 +27,15 @@ public class ChatController {
                                                                               @NotBlank @RequestParam String message,
                                                                               @RequestParam(value = "model", required = false) String modelName,
                                                                               @RequestParam(value = "sessionId", required = false) String sessionId) {
+        String resolvedSessionId = (sessionId != null && !sessionId.isBlank())
+                ? sessionId
+                : UUID.randomUUID().toString();
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_EVENT_STREAM)
                 .cacheControl(CacheControl.noStore().mustRevalidate().sMaxAge(0, TimeUnit.SECONDS))
                 .header("X-Accel-Buffering", "no")
                 .header("Connection", "keep-alive")
-                .body(chatService.streamChat(credentialId, message, modelName, sessionId));
+                .header("X-Session-Id", resolvedSessionId)
+                .body(chatService.streamChat(credentialId, message, modelName, resolvedSessionId));
     }
 }

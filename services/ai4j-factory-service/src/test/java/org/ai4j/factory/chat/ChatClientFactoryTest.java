@@ -5,6 +5,7 @@ import org.ai4j.factory.shared.credential.entity.ModelProvider;
 import org.ai4j.factory.shared.credential.repository.ModelCredentialRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
 
 import java.util.Optional;
 
@@ -21,7 +22,7 @@ class ChatClientFactoryTest {
         ModelCredentialRepository repository = mock(ModelCredentialRepository.class);
         when(repository.findById(1L)).thenReturn(Optional.of(credential(1L, "test-api-key")));
 
-        ChatClientFactory factory = new ChatClientFactory(repository);
+        ChatClientFactory factory = new ChatClientFactory(repository, mock(ChatMemory.class));
 
         ChatClient client = factory.create(1L, "gpt-4o-mini");
 
@@ -33,7 +34,7 @@ class ChatClientFactoryTest {
         ModelCredentialRepository repository = mock(ModelCredentialRepository.class);
         when(repository.findById(1L)).thenReturn(Optional.of(credential(1L, "test-api-key")));
 
-        ChatClientFactory factory = new ChatClientFactory(repository);
+        ChatClientFactory factory = new ChatClientFactory(repository, mock(ChatMemory.class));
 
         ChatClient first = factory.create(1L, "gpt-4o-mini");
         ChatClient second = factory.create(1L, "gpt-4o-mini");
@@ -47,7 +48,7 @@ class ChatClientFactoryTest {
         ModelCredentialRepository repository = mock(ModelCredentialRepository.class);
         when(repository.findById(1L)).thenReturn(Optional.of(credential(1L, "test-api-key")));
 
-        ChatClientFactory factory = new ChatClientFactory(repository);
+        ChatClientFactory factory = new ChatClientFactory(repository, mock(ChatMemory.class));
 
         ChatClient first = factory.create(1L, "gpt-4o-mini");
         ChatClient second = factory.create(1L, "gpt-4.1-mini");
@@ -61,7 +62,7 @@ class ChatClientFactoryTest {
         ModelCredentialRepository repository = mock(ModelCredentialRepository.class);
         when(repository.findById(1L)).thenReturn(Optional.of(credential(1L, "test-api-key")));
 
-        ChatClientFactory factory = new ChatClientFactory(repository);
+        ChatClientFactory factory = new ChatClientFactory(repository, mock(ChatMemory.class));
 
         ChatClient first = factory.create(1L, null);
         ChatClient second = factory.create(1L, "");
@@ -77,7 +78,7 @@ class ChatClientFactoryTest {
         ModelCredentialRepository repository = mock(ModelCredentialRepository.class);
         when(repository.findById(1L)).thenReturn(Optional.of(credential(1L, "test-api-key")));
 
-        ChatClientFactory factory = new ChatClientFactory(repository);
+        ChatClientFactory factory = new ChatClientFactory(repository, mock(ChatMemory.class));
 
         ChatClient firstA = factory.create(1L, "gpt-4o-mini");
         ChatClient firstB = factory.create(1L, "gpt-4.1-mini");

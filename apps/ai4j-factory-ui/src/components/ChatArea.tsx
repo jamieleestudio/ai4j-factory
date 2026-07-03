@@ -8,19 +8,29 @@ import { SelectableModelOption } from "../types/credential";
 import { buildSelectableModelOptions } from "../utils/modelOptions";
 import { subscribeSSE, type SSESubscription } from "../utils/sse";
 
+import { AppMode } from "./ChatInterface";
+
 interface ChatAreaProps {
   isSidebarOpen: boolean;
   toggleSidebar: () => void;
+  initialSessionId?: string | null;
+  onFirstMessage?: (sessionId: string, title: string, mode: AppMode) => void;
 }
 
-export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
+export default function ChatArea({ isSidebarOpen, toggleSidebar, initialSessionId, onFirstMessage }: ChatAreaProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const subscriptionRef = useRef<SSESubscription | null>(null);
-  const sessionIdRef = useRef<string>(`${Date.now()}-${Math.random().toString(36).slice(2, 11)}`);
+  const sessionIdRef = useRef<string>(initialSessionId || `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`);
   
   const [modelOptions, setModelOptions] = useState<SelectableModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<SelectableModelOption | null>(null);
+
+  useEffect(() => {
+    if (initialSessionId) {
+      sessionIdRef.current = initialSessionId;
+    }
+  }, [initialSessionId]);
 
   useEffect(() => {
     loadCredentials();
@@ -52,6 +62,11 @@ export default function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps
     if (subscriptionRef.current) {
         subscriptionRef.current.close();
         subscriptionRef.current = null;
+    }
+
+    const isFirstMessage = messages.length === 0;
+    if (isFirstMessage && onFirstMessage) {
+      onFirstMessage(sessionIdRef.current, content, "chat");
     }
 
     // Add user message immediately
