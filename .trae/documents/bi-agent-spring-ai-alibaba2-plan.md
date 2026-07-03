@@ -62,7 +62,9 @@
 
   * BI 领域仍然需要语义层，且语义最终会转为 SQL。
 
-* 明确不复用的旧设计：
+* 明确不复用的旧设计（严禁参照）：
+
+  * 严禁在开发新模块时参照或复制旧版 `ai4j-factory-service` 的 BI 实现代码。
 
   * 不复用 `ai4j-factory-service` 的包结构。
 
@@ -790,7 +792,7 @@ apps/ai4j-factory-ui/src/components
 
 * `ai4j-agent-assistbot` 继续保留为 demo/sandbox，不与 `ai4j-agent-bi-service` 混合职责。
 
-* 旧 `ai4j-factory-service` 只作为问题样本与迁移对照，不作为新架构模板。
+* 旧 `ai4j-factory-service` 的 BI 代码已被废弃，严禁在开发新模块时参照或复制其代码实现。旧代码仅作为理解历史问题和功能边界的对照，不能作为新架构的模板。
 
 ## Verification Steps
 
